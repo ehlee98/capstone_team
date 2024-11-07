@@ -1,7 +1,6 @@
 
 
-import requests
-
+# https://www.alphavantage.co/documentation/
 # replace the "demo" apikey below with your own key from https://www.alphavantage.co/support/#api-key
 # url = 'https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers=TSLA&time_from=20240101T0000&sort=EARLIEST&limit=1000&apikey=demo'
 
