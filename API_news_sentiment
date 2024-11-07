@@ -1,0 +1,69 @@
+
+
+import requests
+
+# replace the "demo" apikey below with your own key from https://www.alphavantage.co/support/#api-key
+# url = 'https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers=TSLA&time_from=20240101T0000&sort=EARLIEST&limit=1000&apikey=demo'
+
+import requests
+import pandas as pd
+import time  # Optional, to avoid rate limits
+
+# Initialize variables
+apikey = 'demo'
+base_url = 'https://www.alphavantage.co/query'
+ticker = 'TSLA'
+limit = 1000
+sort = 'EARLIEST'
+daily_free_request = 25
+
+# Set loop time, should be less than above daily_free_request
+loop_time = 10
+
+# Set initial time_from value (e.g., start date)
+time_from = '20240101T0000'
+all_records = []
+
+
+for i in range(loop_time):
+    # Construct the URL with updated time_from
+    url = f'{base_url}?function=NEWS_SENTIMENT&tickers={ticker}&time_from={time_from}&sort={sort}&limit={limit}&apikey={apikey}'
+
+    # Request data
+    r = requests.get(url)
+    data = r.json()
+
+    # Check if 'feed' is present in the response
+    if 'feed' not in data:
+        print(f"No 'feed' data found in response for request {i + 1}")
+        break
+
+    # Extract relevant information
+    records = []
+    for item in data["feed"]:
+        time_published = item.get("time_published")
+
+        for sentiment in item.get("ticker_sentiment", []):
+            if sentiment.get("ticker") == ticker:
+                ticker_sentiment_score = sentiment.get("ticker_sentiment_score")
+                ticker_sentiment_label = sentiment.get("ticker_sentiment_label")
+
+                # Append to records as a tuple
+                records.append((time_published, ticker_sentiment_score, ticker_sentiment_label))
+
+    # Append the current records to all_records
+    all_records.extend(records)
+
+    # Update time_from with the last `time_published` in this response for the next iteration
+    if records:
+        time_from = records[-1][0][:-2]  # The last `time_published` value
+
+    # Optional: Sleep to avoid hitting the API rate limit
+    time.sleep(1)
+
+# Create DataFrame
+df = pd.DataFrame(all_records, columns=["time_published", "ticker_sentiment_score", "ticker_sentiment_label"])
+
+# Display the result
+print(df)
+df.to_csv("tesla_2024_news_sentiment.csv", index=False)
