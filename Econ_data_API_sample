@@ -1,0 +1,147 @@
+
+# https://fred.stlouisfed.org/docs/api/api_key.html
+
+
+import yfinance as yf
+import pandas as pd
+import numpy as np
+
+pd.set_option("display.max_columns", None)
+pd.set_option('display.max_colwidth', None)
+
+start_date = "2021-01-01"
+end_date = "2024-11-08"
+
+def fetch_and_process_stock_data(symbol, start, end):
+    df = yf.download(symbol, start=start, end=end)
+    df.index = pd.to_datetime(df.index)
+    df.index = df.index.strftime('%Y-%m-%d')
+    df['Adj_Closed_price'] = df[('Adj Close', symbol)]
+    df['Closed_price'] = df[('Close', symbol)]
+    df['Open_price'] = df[('Open', symbol)]
+    df['Log_Return'] =  np.log(df['Adj_Closed_price'] / df['Adj_Closed_price'].shift(1))
+    df_result = df[['Adj_Closed_price', 'Log_Return','Open_price','Closed_price']].copy()
+    df_result = df_result.reset_index().rename(columns={'index': 'Date'})
+    return df_result
+
+tesla_data=fetch_and_process_stock_data("TSLA", start_date, end_date)
+
+import requests
+import pandas as pd
+
+# Your FRED API Key, replace demo to api key
+API_KEY = 'demo'
+
+# Define FRED Series IDs for the indicators, pick econ variables related to the stock
+INDICATORS = {
+    "interest_rate": "DFF",  # Effective Federal Funds Rate
+    "unemployment_rate": "UNRATE",  # Civilian Unemployment Rate
+    "cpi": "CPIAUCSL",  # Consumer Price Index for All Urban Consumers
+    "gdp_growth": "A191RL1Q225SBEA",  # Real GDP (percent change from preceding period)
+    "industrial_production": "INDPRO",  # Industrial Production Index
+    "vehicle_sales": "TOTALSA",  # Total Vehicle Sales
+    "personal_consumption": "PCE",  # Personal Consumption Expenditures
+    "retail_sales_auto": "MRTSSM441USN",  # Retail Sales: Motor Vehicle and Parts Dealers
+    "crude_oil_prices": "DCOILWTICO",  # Crude Oil Prices
+    "sp500": "SP500"  # S&P 500 Index
+}
+
+
+# Function to fetch data from FRED
+def fetch_fred_data(series_id, start_date, end_date):
+    url = f"https://api.stlouisfed.org/fred/series/observations"
+    params = {
+        "series_id": series_id,
+        "api_key": API_KEY,
+        "file_type": "json",
+        "observation_start": start_date,
+        "observation_end": end_date,
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
+
+    # Parse data into DataFrame
+    observations = data.get("observations", [])
+    dates = [obs["date"] for obs in observations]
+    values = [float(obs["value"]) if obs["value"] != "." else None for obs in observations]
+
+    return pd.DataFrame({"Date": dates, series_id: values}).set_index("Date")
+
+
+# Fetch each indicator and merge into a single DataFrame
+def get_economic_indicators(start_date, end_date):
+    data_frames = []
+    for name, series_id in INDICATORS.items():
+        df = fetch_fred_data(series_id, start_date, end_date)
+        df.columns = [name]  # Rename column to indicator name
+        data_frames.append(df)
+
+    # Merge all indicators on Date
+    economic_data = pd.concat(data_frames, axis=1)
+    return economic_data.ffill().dropna()  # Forward fill and drop initial NaN values
+
+# Example usage
+economic_data = get_economic_indicators(start_date,end_date)
+economic_data=economic_data.reset_index()
+print(economic_data)
+
+
+
+
+def calculate_mom_change(df, variable_name, ratio=False):
+    """
+    Calculate month-over-month change for a given variable in a daily DataFrame.
+
+    Parameters:
+    - df (pd.DataFrame): DataFrame with a DateTime index and daily values for the specified variable.
+    - variable_name (str): The name of the variable/column to calculate MoM change for.
+    - ratio (bool): If True, calculates month-over-month percentage change; if False, calculates raw difference.
+
+    Returns:
+    - pd.DataFrame: Updated DataFrame with a new column for month-over-month change.
+    """
+    # Ensure date is the index if it's not already
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df['Date'] = pd.to_datetime(df['Date'])
+        df.set_index('Date', inplace=True)
+
+    # Resample to monthly end frequency using the last available value for each month
+    monthly_data = df[variable_name].resample('ME').last().to_frame()
+
+    # Calculate month-over-month change based on ratio flag
+    if ratio:
+        monthly_data[f'{variable_name}_mom'] = monthly_data[variable_name].diff()
+    else:
+        monthly_data[f'{variable_name}_mom'] = monthly_data[variable_name].pct_change(fill_method=None) * 100
+
+    # Merge MoM data back to daily data
+    df = df.merge(monthly_data[[f'{variable_name}_mom']], left_index=True, right_index=True, how='left')
+
+    # Forward-fill the NaN values in the new column to propagate the monthly value across all days in the month
+    df[f'{variable_name}_mom'] = df[f'{variable_name}_mom'].ffill()
+
+    # Reset the index if needed
+    df = df.reset_index()
+
+    return df
+
+# For percentage change (MoM as ratio)
+economic_data = calculate_mom_change(economic_data, 'interest_rate', ratio=True)
+economic_data = calculate_mom_change(economic_data, 'unemployment_rate', ratio=True)
+economic_data = calculate_mom_change(economic_data, 'gdp_growth', ratio=True)
+
+# For raw difference (absolute MoM change)
+economic_data = calculate_mom_change(economic_data, 'cpi', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'industrial_production', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'vehicle_sales', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'personal_consumption', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'retail_sales_auto', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'crude_oil_prices', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'sp500', ratio=False)
+
+print(economic_data)
+# economic_data['Date'] = pd.to_datetime(economic_data['Date'])
+# economic_data.set_index('Date', inplace=True)
+# economic_data.resample('ME').last()
+
+economic_data.to_csv("economic_data_Tesla.csv", index=False)
