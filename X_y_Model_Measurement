@@ -229,6 +229,29 @@ print(f"Symmetric Mean Absolute Percentage Error (sMAPE): {sMAPE:.2f}%")
 # Mean Directional Accuracy (MDA): 52.78%
 # Symmetric Mean Absolute Percentage Error (sMAPE): 2.36%
 
+# feature importance
+# Baseline performance
+baseline_mse = mean_squared_error(y_test, model.predict(x_test))
+
+# Permutation Feature Importance
+feature_names = dataset.columns[1:]  # Exclude 'Adj_Closed_price'
+importance_scores = {}
+
+for i in range(x_test.shape[2]):  # Loop over each feature
+    # Make a copy of the test set and shuffle only the i-th feature
+    x_test_permuted = x_test.copy()
+    np.random.shuffle(x_test_permuted[:, :, i])  # Shuffle each feature column
+
+    # Calculate the error after shuffling
+    permuted_mse = mean_squared_error(y_test, model.predict(x_test_permuted))
+    importance_scores[feature_names[i-1]] = permuted_mse - baseline_mse  # Calculate score difference
+
+# Display feature importance scores
+importance_scores_sorted = {k: v for k, v in sorted(importance_scores.items(), key=lambda item: item[1], reverse=True)}
+print("Permutation Feature Importance (Higher is more important):")
+for feature, score in importance_scores_sorted.items():
+    print(f"{feature}: {score:.4f}")
+
 
 
 #################################################################################################
