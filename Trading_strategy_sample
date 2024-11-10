@@ -1,0 +1,129 @@
+
+# Step 4: Trading Strategy Implementation
+
+# Initialize baseline portfolio value for the "hold VOO all time" strategy
+baseline_portfolio_value = 100  # Assume an initial portfolio value of $100
+
+# Placeholder for baseline portfolio history
+baseline_portfolio_history = [baseline_portfolio_value]
+
+# Simulate holding VOO all time
+for i in range(len(all_actuals)):
+    # Calculate portfolio value based solely on VOO returns
+    baseline_portfolio_value *= np.exp(all_actuals[i])  # Update based on actual VOO return for that day
+    baseline_portfolio_history.append(baseline_portfolio_value)
+
+# Convert baseline portfolio history to DataFrame for analysis
+baseline_portfolio_df = pd.DataFrame(baseline_portfolio_history, columns=['Portfolio_Value'])
+print(f"Final baseline Portfolio Value: {baseline_portfolio_value:.2f}")
+
+baseline_portfolio_df.plot(title="Baseline Portfolio Value Over Time", ylabel="Portfolio Value", xlabel="Days")
+plt.show(block=True)
+#
+# if voo_pred < 0 and Tesla>0:
+# then VOO*0.9 and move VOO*0.1 to Tesla
+# if voo_pred < 0 and Tesla<0:
+# then VOO*0.9 and move VOO*0.1 to Cash and move all Tesla to Cash
+# if voo_pred>0 and  Tesla<0:
+# then move all Cash and all Tesla to VOO
+# if  voo_pred>0 and  Tesla>0 and Tesla>2*voo_pred:
+# then VOO*0.9 and move VOO*0.1 to Tesla and move all Cash to Tesla
+# if  voo_pred>0 and  Tesla>0 and Tesla<=2*voo_pred:
+# then move all Cash to VOO
+# else:
+# same location as previous day
+
+def trading_strategy(voo_pred, tesla_pred, current_allocation):
+    """
+    Implements the updated trading strategy based on VOO and Tesla predictions.
+
+    Parameters:
+    - voo_pred: Prediction for VOO return (float)
+    - tesla_pred: Prediction for Tesla return (float)
+    - current_allocation: Current allocation dictionary with 'VOO', 'Tesla', and 'Cash' keys.
+
+    Returns:
+    - new_allocation: Updated allocation in VOO, Tesla, and Cash
+    """
+    new_allocation = current_allocation.copy()  # Start with current allocation
+
+    # Case 1: VOO < 0 and Tesla > 0
+    if voo_pred < 0 and tesla_pred > 0:
+        new_allocation['VOO'] *= 0.9  # Allocate 90% of VOO
+        new_allocation['Tesla'] += current_allocation['VOO'] * 0.1  # Move 10% of VOO to Tesla
+
+    # Case 2: VOO < 0 and Tesla < 0
+    elif voo_pred < 0 and tesla_pred < 0:
+        new_allocation['VOO'] *= 0.9  # Allocate 90% of VOO
+        new_allocation['Cash'] += current_allocation['VOO'] * 0.1 + current_allocation[
+            'Tesla']  # Move 10% of VOO + all Tesla to Cash
+        new_allocation['Tesla'] = 0  # Clear Tesla allocation
+
+    # Case 3: VOO > 0 and Tesla < 0
+    elif voo_pred > 0 and tesla_pred < 0:
+        new_allocation['VOO'] += current_allocation['Cash'] + current_allocation[
+            'Tesla']  # Move all Cash and all Tesla to VOO
+        new_allocation['Cash'] = 0
+        new_allocation['Tesla'] = 0
+
+    # Case 4: VOO > 0 and Tesla > 0 and Tesla > 2 * VOO
+    elif voo_pred > 0 and tesla_pred > 0 and tesla_pred > 2 * voo_pred:
+        new_allocation['VOO'] *= 0.9  # Allocate 90% of VOO
+        new_allocation['Tesla'] += current_allocation['VOO'] * 0.1 + current_allocation[
+            'Cash']  # Move 10% of VOO + all Cash to Tesla
+        new_allocation['Cash'] = 0  # Clear Cash allocation
+
+    # Case 5: VOO > 0 and Tesla > 0 and Tesla <= 2 * VOO
+    elif voo_pred > 0 and tesla_pred > 0 and tesla_pred <= 2 * voo_pred:
+        new_allocation['VOO'] += current_allocation['Cash']  # Move all Cash to VOO
+        new_allocation['Cash'] = 0
+
+    # Default: No change, retain previous day’s allocation
+    else:
+        new_allocation = current_allocation
+    print(new_allocation)
+    return new_allocation
+
+
+# Initial portfolio allocation and value
+initial_allocation = {'VOO': 1.0, 'Tesla': 0, 'Cash': 0}
+portfolio_value = 100000  # Assume an initial portfolio value of $100,000
+# Define a variable to toggle between predicted and actual returns
+use_actual_returns = True  # Set to True to use actual returns
+
+# Placeholder for portfolio history
+portfolio_history = []
+
+# Initial portfolio value and allocation
+portfolio_value = 100  # Assume an initial portfolio value of $100
+initial_allocation = {'VOO': 1.0, 'Tesla': 0.0, 'Cash': 0.0}  # All initially in VOO
+
+# Simulate trading for each day in the test set
+for i in range(len(X_test_voo)):
+    # Get predictions for VOO and Tesla
+    voo_pred = lstm_voo.predict(X_test_voo[i].reshape(1, -1, X_test_voo.shape[2]))[0][0]
+    tesla_pred = xgb_tesla.predict(X_test_tesla[i].reshape(1, -1))[0]
+
+    # Use actual returns if specified
+    voo_return = all_actuals[i] if use_actual_returns else voo_pred
+    tesla_return = tesla_all_actuals[i] if use_actual_returns else tesla_pred
+
+    # Update allocation based on the strategy
+    allocation = trading_strategy(voo_return, tesla_return, initial_allocation)
+
+    # Calculate the portfolio value based on the returns and new allocation
+    portfolio_value *= np.exp(voo_return * allocation['VOO'] + tesla_return * allocation['Tesla'])
+
+    # Update allocation for the next day
+    initial_allocation = allocation
+
+    # Track portfolio value over time
+    portfolio_history.append(portfolio_value)
+
+# Convert portfolio history to DataFrame for analysis
+portfolio_df = pd.DataFrame(portfolio_history, columns=['Portfolio_Value'])
+
+# Display final portfolio value and plot the performance
+print(f"Final Portfolio Value: {portfolio_value:.2f}")
+portfolio_df.plot(title="Portfolio Value Over Time", ylabel="Portfolio Value", xlabel="Days")
+plt.show(block=True)
