@@ -19,7 +19,8 @@ daily_free_request = 25
 # Set loop time, should be less than above daily_free_request
 loop_time = 10
 
-# Set initial time_from value (e.g., start date)
+# Set initial time_from value (e.g., start date), 
+# noticed that the format is 20240101T0000 (4 zeros after 'T') instead of 20240101T000000 (6 zeros after 'T')
 time_from = '20240101T0000'
 all_records = []
 
@@ -66,3 +67,23 @@ df = pd.DataFrame(all_records, columns=["time_published", "ticker_sentiment_scor
 # Display the result
 print(df)
 df.to_csv("tesla_2024_news_sentiment.csv", index=False)
+
+
+# combined csv due to API limit and generated daily sentiment variables
+df1 = pd.read_csv("tesla_2024_news_sentiment.csv")
+df2 = pd.read_csv("tesla_2023_part1_news_sentiment.csv")
+df3 = pd.read_csv("tesla_2023_part2_news_sentiment.csv")
+df = pd.concat([df1, df2, df3], ignore_index=True)
+df['date'] = pd.to_datetime(df['time_published'], format='%Y%m%dT%H%M%S').dt.strftime('%Y-%m-%d')
+
+daily_avg_sentiment_score = df.groupby('date')['ticker_sentiment_score'].mean().reset_index()
+daily_avg_sentiment_score = daily_avg_sentiment_score.rename(columns={'ticker_sentiment_score': 'avg_sentiment_score'})
+sentiment_counts = df.groupby(['date', 'ticker_sentiment_label']).size().unstack(fill_value=0)
+sentiment_proportions = sentiment_counts.div(sentiment_counts.sum(axis=1), axis=0) * 100
+sentiment_proportions = sentiment_proportions.reset_index()
+daily_sentiment_summary = pd.merge(daily_avg_sentiment_score, sentiment_proportions, on='date', how='left')
+
+# Display the result
+print(daily_sentiment_summary)
+daily_sentiment_summary.to_csv("tesla_2022_2023_news_sentiment.csv", index=False)
+
