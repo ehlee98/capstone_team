@@ -1,1 +1,13 @@
+Our project utilizes two datasets obtained via APIs, with proper respect for data ownership and licensing:
 
+Economic Data:
+This dataset includes variables such as interest rates, employment statistics, and other macroeconomic indicators. It is sourced from the Federal Reserve Economic Data (FRED) API. Access requires a free API key, which can be obtained by registering at:
+https://fred.stlouisfed.org/docs/api/api_key.html.
+FRED data usage is subject to their terms of service, and the API key allows free access to this publicly available economic data.
+
+Sentiment Data:
+This dataset contains daily sentiment scores derived from news articles for individual stock tickers. It is accessed via the Alpha Vantage API. Users need to apply for a free API key at:
+https://www.alphavantage.co/query.
+Alpha Vantage provides free tier access to sentiment data under their API usage policy, which must be adhered to when using or redistributing the data.
+
+Both APIs are free to use with the respective API keys, and all data usage complies with the licensing terms of the providers.
