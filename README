@@ -1,3 +1,10 @@
+Project: Smart Signals - Enhancing Profitability in Automatic Investment Plans Using Machine Learning
+Team Members: 
+Yi Qin
+Esther Lee
+Charles Ye
+
+
 Project Overview
 This project focuses on stock prediction using various models, including LSTM, ARIMA, and hybrid approaches such as LSTM-XGBoost. The analysis incorporates sentiment data and economic indicators to improve forecasting accuracy.
 
