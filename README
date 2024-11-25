@@ -1,1 +1,45 @@
+Project Overview
+This project focuses on stock prediction using various models, including LSTM, ARIMA, and hybrid approaches such as LSTM-XGBoost. The analysis incorporates sentiment data and economic indicators to improve forecasting accuracy.
 
+Components
+README File: This document provides instructions on how to set up and run the project.
+Requirements File: A requirements.txt file lists all the libraries required to execute the code.
+Code: Scripts to generate predictions, results, and figures for the reports.
+Cleaned Code: Cleaned and optimized code with unused blocks removed, relative file paths used, and sensitive information (like API keys) excluded.
+Data Access Statement: Detailed instructions for obtaining data via APIs. Licenses and terms of use for data providers are respected.
+
+How to Run the Project
+1. Set Up Environment
+Clone the repository or download the project files.
+Ensure you have Python 3.8+ installed on your system.
+Install the required libraries:
+pip install -r requirements.txt
+
+2. Obtain API Keys
+See Data Access Statement in the details.
+
+3. Run Code
+Refer to the cleaned code folderwhich follow a naming convention indicating their execution sequence. 
+The first two characters in the file names specify the order in which the files should be executed.
+
+3.1 Data Preparation:
+File: 01_final_1_voo_1_data_prepared.py
+Purpose: Fetch and preprocess the necessary data, including economic and sentiment data.
+Command to run: python 01_final_1_voo_1_data_prepared.py
+Outputs: Cleaned datasets saved in the data/ directory.
+
+3.2 Model Training and Evaluation:
+File: 02_final_voo_train_models.py
+Purpose: Train LSTM, ARIMA, and hybrid models (e.g., LSTM-XGBoost).
+Command to run: python 02_final_voo_train_models.py
+Outputs: Trained models saved in the models/ directory and Evaluation metrics logged.
+
+3.3 Results and Visualization:
+File: 03_final_voo_results_analysis.py
+Purpose: Generate predictions, calculate metrics (e.g., MSE, R²), and create figures.
+Command to run: python 03_final_voo_results_analysis.py
+Outputs: Predictions saved as CSV files in the results/ directory and Plots and figures saved in the figures/ directory.
+
+4. Output
+Predictions and evaluation metrics (e.g., MSE, R², Sharpe Ratio) are saved as CSV files.
+Figures are generated and saved in the figures directory.
