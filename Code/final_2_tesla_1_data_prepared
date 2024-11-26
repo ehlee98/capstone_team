@@ -1,0 +1,156 @@
+
+import yfinance as yf
+import pandas as pd
+import numpy as np
+
+pd.set_option("display.max_columns", None)
+pd.set_option('display.max_colwidth', None)
+
+start_date = "2022-03-01"
+end_date = "2024-11-22"
+
+# price data
+def fetch_and_process_stock_data(symbol, start, end):
+    df = yf.download(symbol, start=start, end=end)
+    df.index = pd.to_datetime(df.index)
+    df.index = df.index.strftime('%Y-%m-%d')
+    df['Adj_Closed_price'] = df['Adj Close']
+    df['Closed_price'] = df['Close']
+    df['Open_price'] = df['Open']
+    df['Log_Return'] = np.log(df['Adj_Closed_price'] / df['Adj_Closed_price'].shift(1))
+    df['Adj_Open_price'] = df['Open_price'] * (df['Adj_Closed_price'] / df['Closed_price'])
+    # only use Next_day_Adj_Open_price for measurement, drop it for model building to prevent data leakage
+    df['Next_day_Adj_Open_price'] = df['Adj_Open_price'].shift(-1)
+    df_result = df[['Adj_Closed_price','Log_Return','Next_day_Adj_Open_price']].copy()
+    df_result = df_result.reset_index().rename(columns={'index': 'Date'})
+    return df_result
+
+tesla_stock_data=fetch_and_process_stock_data("TSLA", start_date, end_date)
+
+# technical data
+def add_technical_indicators(df):
+    # # Moving Averages based on Adjusted Close
+    df['ma_10'] = df['Adj_Closed_price'].rolling(window=10).mean()
+    df['ma_30'] = df['Adj_Closed_price'].rolling(window=30).mean()
+    # # Exponential Moving Average based on Adjusted Close
+    df['ema_10'] = df['Adj_Closed_price'].ewm(span=10, adjust=False).mean()
+    # # Volatility - Standard Deviation of log returns
+    df['volatility_10'] = df['Log_Return'].rolling(window=10).std()
+    # # Relative Strength Index (RSI) based on Adjusted Close
+    delta = df['Adj_Closed_price'].diff(1)
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['rsi_14'] = 100 - (100 / (1 + rs))
+    # # Fill NaN values with previous values or a constant if needed
+    df = df.ffill().fillna(0)
+    return df
+
+tesla_stock_data = add_technical_indicators(tesla_stock_data)
+
+# economic_data
+economic_data = pd.read_csv("economic_data_Tesla.csv")
+
+def calculate_mom_change(df, variable_name, ratio=False):
+    """
+    Calculate month-over-month change for a given variable in a daily DataFrame.
+
+    Parameters:
+    - df (pd.DataFrame): DataFrame with a DateTime index and daily values for the specified variable.
+    - variable_name (str): The name of the variable/column to calculate MoM change for.
+    - ratio (bool): If True, calculates month-over-month percentage change; if False, calculates raw difference.
+
+    Returns:
+    - pd.DataFrame: Updated DataFrame with a new column for month-over-month change.
+    """
+    # Ensure date is the index if it's not already
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df['Date'] = pd.to_datetime(df['Date'])
+        df.set_index('Date', inplace=True)
+
+    # Resample to monthly end frequency using the last available value for each month
+    monthly_data = df[variable_name].resample('ME').last().to_frame()
+
+    # Calculate month-over-month change based on ratio flag
+    if ratio:
+        monthly_data[f'{variable_name}_mom'] = monthly_data[variable_name].diff()
+    else:
+        monthly_data[f'{variable_name}_mom'] = monthly_data[variable_name].pct_change(fill_method=None) * 100
+
+    # Merge MoM data back to daily data
+    df = df.merge(monthly_data[[f'{variable_name}_mom']], left_index=True, right_index=True, how='left')
+
+    # Forward-fill the NaN values in the new column to propagate the monthly value across all days in the month
+    df[f'{variable_name}_mom'] = df[f'{variable_name}_mom'].ffill()
+
+    # Reset the index if needed
+    df = df.reset_index()
+
+    return df
+
+# For percentage change (MoM as ratio)
+economic_data = calculate_mom_change(economic_data, 'interest_rate', ratio=True)
+economic_data = calculate_mom_change(economic_data, 'unemployment_rate', ratio=True)
+economic_data = calculate_mom_change(economic_data, 'gdp_growth', ratio=True)
+
+# For raw difference (absolute MoM change)
+economic_data = calculate_mom_change(economic_data, 'cpi', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'industrial_production', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'vehicle_sales', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'personal_consumption', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'retail_sales_auto', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'crude_oil_prices', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'sp500', ratio=False)
+
+print(economic_data)
+
+
+ # sentiment_data
+df1 = pd.read_csv("tesla_2024_news_sentiment.csv")
+df2 = pd.read_csv("tesla_2023_part1_news_sentiment.csv")
+df3 = pd.read_csv("tesla_2023_part2_news_sentiment.csv")
+df4 = pd.read_csv("tesla_2022_part1_news_sentiment.csv")
+df5 = pd.read_csv("tesla_2022_part2_news_sentiment.csv")
+df6 = pd.read_csv("tesla_2022_part3_news_sentiment.csv")
+df7 = pd.read_csv("Tesla_202411_202411_news_sentiment.csv")
+df = pd.concat([df1, df2, df3, df4, df5, df6,df7], ignore_index=True)
+df['date'] = pd.to_datetime(df['time_published'], format='%Y%m%dT%H%M%S').dt.strftime('%Y-%m-%d')
+
+daily_avg_sentiment_score = df.groupby('date')['ticker_sentiment_score'].mean().reset_index()
+daily_avg_sentiment_score = daily_avg_sentiment_score.rename(columns={'ticker_sentiment_score': 'avg_sentiment_score'})
+sentiment_counts = df.groupby(['date', 'ticker_sentiment_label']).size().unstack(fill_value=0)
+sentiment_proportions = sentiment_counts.div(sentiment_counts.sum(axis=1), axis=0) * 100
+sentiment_proportions = sentiment_proportions.reset_index()
+daily_sentiment_summary = pd.merge(daily_avg_sentiment_score, sentiment_proportions, on='date', how='left')
+
+sentiment_mapping = {
+    'Bearish': -1,
+    'Somewhat-Bearish': -0.5,
+    'Neutral': 0,
+    'Somewhat-Bullish': 0.5,
+    'Bullish': 1
+}
+daily_sentiment_summary['daily_sentiment_score'] = (
+    daily_sentiment_summary['Bearish'] * sentiment_mapping['Bearish'] +
+    daily_sentiment_summary['Somewhat-Bearish'] * sentiment_mapping['Somewhat-Bearish'] +
+    daily_sentiment_summary['Neutral'] * sentiment_mapping['Neutral'] +
+    daily_sentiment_summary['Somewhat-Bullish'] * sentiment_mapping['Somewhat-Bullish'] +
+    daily_sentiment_summary['Bullish'] * sentiment_mapping['Bullish']
+)
+daily_sentiment_summary.rename(columns={'date': 'Date'}, inplace=True)
+# Display the result
+
+tesla_stock_data.columns = ['_'.join(filter(None, col)).strip() for col in tesla_stock_data.columns]
+tesla_stock_data=tesla_stock_data.reset_index()
+tesla_stock_data['Date'] = pd.to_datetime(tesla_stock_data['Date'])
+economic_data['Date'] = pd.to_datetime(economic_data['Date'])
+daily_sentiment_summary['Date'] = pd.to_datetime(daily_sentiment_summary['Date'])
+TSLA_prepared_data = (
+    tesla_stock_data.reset_index()
+    .merge(economic_data[['Date', 'interest_rate_mom','unemployment_rate_mom','gdp_growth_mom'
+        ,'cpi_mom','industrial_production_mom','vehicle_sales_mom','personal_consumption_mom'
+        ,'retail_sales_auto_mom','crude_oil_prices_mom','sp500_mom']], on='Date', how='left')  # Join with table2
+    .merge(daily_sentiment_summary[['Date', 'daily_sentiment_score']], on='Date', how='left')  # Join with table3
+)
+
+TSLA_prepared_data.to_csv('tsla_prepared_data.csv', index=False)
