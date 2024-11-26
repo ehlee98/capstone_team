@@ -6,6 +6,7 @@ from vega_datasets import data
 from datetime import datetime
 import yfinance as yahooFinance
 
+alt.data_transformers.disable_max_rows()
 
 ## Prep for Visualizations
 #Function to pull stock data
@@ -29,15 +30,26 @@ def calculate_volatility(df):
 start_time= '2022-03-01'
 current_time= datetime.now()
 
-stock_list=['AVGO','IBM','ORCL','CRM','TSLA','COF','GS','NVDA','NKE','GM','ILMN']
+stock_list=['AVGO','IBM','ORCL','CRM','TSLA','COF','GS','NVDA','NKE','GM']
 
 #Downloading data
 stock_df=download_stock_data(stock_list, start_time, current_time)
 stock_df=calculate_volatility(stock_df)
+stock_df.reset_index(inplace=True)
+stock_df['Days_From_Today']=stock_df.groupby('Ticker').cumcount(ascending=False)
 
+vix_df=download_stock_data(['%5EVIX'], start_time, current_time)
+vix_df.reset_index(inplace=True)
+vix_df['Date']= pd.to_datetime(vix_df['Date'])
 
+# VIX Bins and Corresponding Emojis
+vix_cutoffs=[0,15,20,25,30,300]
+vix_emojis=['😴','🙄','🫣','🫨','😱']
+vix_df['Emoji'] = pd.cut(vix_df['Close'], bins=vix_cutoffs, labels=vix_emojis, right=False)
 
-
+# Merged stock_df with vix_df on Date
+merged_df = pd.merge(stock_df, vix_df[['Date','Emoji','Close']], on='Date', how='left')
+merged_df = merged_df.rename(columns={'Close_y': 'VIX Closing Price'})
 
 
 
@@ -106,6 +118,7 @@ final_charts = alt.vconcat(filtered_base, filtered_base1).resolve_scale(
     y='independent'
 )
 
+final_charts
 
 
 
