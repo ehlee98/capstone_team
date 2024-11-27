@@ -4,56 +4,104 @@ import altair as alt
 import vega_datasets
 from vega_datasets import data
 from datetime import datetime
-import yfinance as yahooFinance
+import yfinance as yf
+import plotly.graph_objects as go
+
 
 alt.data_transformers.disable_max_rows()
 
-## Prep for Visualizations
+### Prepping for Visualizations
+#Defining Dates
+start_date = "2022-03-01"
+end_date = "2024-11-22"
+
+#List of stocks
+tickers=['AVGO','COF','CRM','IBM','ORCL','TSLA','GS','NVDA','NKE','GM','ILMN','REGN','VOO']
+tickers_no_voo=['AVGO','COF','CRM','IBM','ORCL','TSLA','GS','NVDA','NKE','GM','ILMN','REGN']
+
+
 #Function to pull stock data
+def fetch_and_process_stock_data(symbol, start, end):
+    df = yf.download(symbol, start=start, end=end)
+    df.index = pd.to_datetime(df.index)
+    df.index = df.index.strftime('%Y-%m-%d')
+    df['Adj_Closed_price'] = df['Adj Close']
+    df['Closed_price'] = df['Close']
+    df['Open_price'] = df['Open']
+    df['Log_Return'] = np.log(df['Adj_Closed_price'] / df['Adj_Closed_price'].shift(1))
+    df['Adj_Open_price'] = df['Open_price'] * (df['Adj_Closed_price'] / df['Closed_price'])
+    # only use Next_day_Adj_Open_price for measurement, drop it for model building to prevent data leakage
+    df['Next_day_Adj_Open_price'] = df['Adj_Open_price'].shift(-1)
+    df_result = df[['Adj_Closed_price','Closed_price','Log_Return','Next_day_Adj_Open_price']].copy()
+    df_result = df_result.reset_index().rename(columns={'index': 'Date'})
+    return df_result
+    
 def download_stock_data(tickers, start_date, end_date):
     stock_data=[]
     for ticker in tickers:
-        data=yahooFinance.download(ticker, start=start_date, end=end_date, interval='1d')
+        data=fetch_and_process_stock_data(ticker, start_date, end_date)
         data['Ticker']=ticker
+        data['Stock Name']=yf.Ticker(ticker).info['shortName']
+        if (ticker!='VOO'):
+            data['Sector']=yf.Ticker(ticker).info['sector']
+            data['Industry']=yf.Ticker(ticker).info['industry']
+        else:
+            data['Sector']='S&P 500'
+            data['Industry']='S&P 500'
         stock_data.append(data)
     return pd.concat(stock_data,axis=0)
 
-#Function to Get Volatility for Visualization
-def calculate_volatility(df):
-    df['Volatility']=((((np.log(df['High'])-
-             np.log(df['Low']))**2)/2)-
-            ((2*np.log(2))-1)*((np.log(df['Adj Close'])
-            -np.log(df['Open']))**2))*1000000
+def add_technical_indicators(df):
+    # # Moving Averages based on Adjusted Close
+    df['ma_10'] = df['Adj_Closed_price'].rolling(window=10).mean()
+    df['ma_30'] = df['Adj_Closed_price'].rolling(window=30).mean()
+    # # Exponential Moving Average based on Adjusted Close
+    df['ema_10'] = df['Adj_Closed_price'].ewm(span=10, adjust=False).mean()
+    # # Volatility - Standard Deviation of log returns
+    df['volatility_10'] = df['Log_Return'].rolling(window=10).std()
+    # # Relative Strength Index (RSI) based on Adjusted Close
+    delta = df['Adj_Closed_price'].diff(1)
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['rsi_14'] = 100 - (100 / (1 + rs))
+    # # Fill NaN values with previous values or a constant if needed
+    df = df.ffill().fillna(0)
     return df
 
-#Defining variables
-start_time= '2022-03-01'
-current_time= datetime.now()
-
-stock_list=['AVGO','IBM','ORCL','CRM','TSLA','COF','GS','NVDA','NKE','GM']
-
 #Downloading data
-stock_df=download_stock_data(stock_list, start_time, current_time)
-stock_df=calculate_volatility(stock_df)
-stock_df.reset_index(inplace=True)
+stock_download=download_stock_data(tickers, start_date, end_date)
+stock_df_sep=[]
+for ticker in tickers:
+    temp_data=stock_download[stock_download['Ticker']==ticker].copy()
+    stock_df_sep.append(add_technical_indicators(temp_data))
+
+stock_df=pd.concat(stock_df_sep, axis=0)
+stock_df['Date']= pd.to_datetime(stock_df['Date'])
 stock_df['Days_From_Today']=stock_df.groupby('Ticker').cumcount(ascending=False)
 
-vix_df=download_stock_data(['%5EVIX'], start_time, current_time)
+stock_df['Adjusted Closing Price']=stock_df['Adj_Closed_price']
+stock_df['EMA (10 Days)']=stock_df['ema_10']
+stock_df['MA (10 Days)']=stock_df['ma_10']
+
+
+vix_df=fetch_and_process_stock_data(['%5EVIX'], start_date, end_date)
 vix_df.reset_index(inplace=True)
 vix_df['Date']= pd.to_datetime(vix_df['Date'])
 
 # VIX Bins and Corresponding Emojis
 vix_cutoffs=[0,15,20,25,30,300]
 vix_emojis=['😴','🙄','🫣','🫨','😱']
-vix_df['Emoji'] = pd.cut(vix_df['Close'], bins=vix_cutoffs, labels=vix_emojis, right=False)
+vix_df['VIX Emoji'] = pd.cut(vix_df['Adj_Closed_price'], bins=vix_cutoffs, labels=vix_emojis, right=False)
 
 # Merged stock_df with vix_df on Date
-merged_df = pd.merge(stock_df, vix_df[['Date','Emoji','Close']], on='Date', how='left')
-merged_df = merged_df.rename(columns={'Close_y': 'VIX Closing Price'})
+merged_df = pd.merge(stock_df, vix_df[['Date','VIX Emoji','Adj_Closed_price']], on='Date', how='left')
+merged_df = merged_df.rename(columns={'Adj_Closed_price_y': 'VIX Closing Price'})
 
 
 
-## First Visualization (Altair)
+### First Visualization (Stock Performance Time-Series Graphs)
+
 # Defined date slider that adjusts based on days from today
 date_slider = alt.binding_range(
     name="Days from Today: ",
@@ -71,9 +119,9 @@ date_select = alt.selection_point(
 
 # Defined ticker symbol drop-down 
 ticker_dropdown = alt.binding_select(
-    options =  stock_list+[None],
-    labels =  stock_list+['All Stocks'],
-    name = "Ticker Symbol"
+    options =  tickers,
+    labels =  tickers,
+    name = "Stock Symbol: "
 )
 
 # Created selection for ticker_dropdown
@@ -84,26 +132,37 @@ ticker_select = alt.selection_point(
 )
 
 # Created top chart that shows stock closing prices
-base = alt.Chart(stock_df).mark_line().encode(
-    x='Date:T',
-    y=alt.Y('Close:Q', title='Closing Price'),
-    color=alt.Color('Ticker:N').scale(domain=stock_list),
-    tooltip=['Ticker:N','Date:T', 'Close:Q']
-).properties(width=500, height=200)
+base = alt.Chart(stock_df).transform_fold(
+    ['Adjusted Closing Price', 'MA (10 Days)', 'EMA (10 Days)'],
+    as_=['Legend', 'value'] 
+).mark_line().encode(
+    x=alt.X('Date:T', title=''),
+    y=alt.Y('value:Q', title='Adjusted Closing Price'),
+    color='Legend:N',  
+    tooltip=['Stock Name:N','Ticker:N', 'Sector:N', 'Industry:N', 'Date:T', 
+             alt.Tooltip('Adjusted Closing Price:Q', title='Adjusted Closing Price', format='$.2f'),
+             alt.Tooltip('MA (10 Days):Q', title='MA (10 Days)', format='$.2f'),
+             alt.Tooltip('EMA (10 Days):Q', title='EMA (10 Days)', format='$.2f'),
+
+             ],
+    opacity=alt.condition('datum.Legend == "Adjusted Closing Price"', alt.value(1), alt.value(0.6))
+).properties(width=500, height=300)
+
 
 # Bottom chart that shows stock's volatility and VIX indicators
 base1 = alt.Chart(merged_df).mark_line().encode(
     x='Date:T',
-    y=alt.Y('Volatility:Q', title='Volatility'),
-    color=alt.Color('Ticker:N').scale(domain=stock_list),
-    tooltip=['Ticker:N','Date:T','Volatility:Q', 'Emoji:N']
-).properties(width=500, height=200)
+    y=alt.Y('volatility_10:Q', title='Volatility'),
+    color=alt.value('grey'),
+    tooltip=['Ticker:N','Date:T',alt.Tooltip('volatility_10:Q',title='10 Day Rolling Volatility',format='.2f'),
+             alt.Tooltip('VIX Closing Price:Q',format='$.2f'),'VIX Emoji:N']
+).properties(width=500, height=75)
 
 # Apply filters to the charts based on the selected ticker and date
 filtered_base = (base).add_params(ticker_select, date_select).transform_filter(
     ticker_select).transform_filter(
     alt.datum.Days_From_Today <= date_select['Days_From_Today']
-).interactive()
+)
 
 
 
@@ -118,86 +177,269 @@ final_charts = alt.vconcat(filtered_base, filtered_base1).resolve_scale(
     y='independent'
 )
 
+
 final_charts
 
 
 
+### Second Visualization (News Sentiment Drop-Down Table)
 
-## Second Visualization (Plotly)
-news_df=pd.concat([daily_sentiment_summary, ibm_sentiment_summary, crm_sentiment_summary, avgo_sentiment_summary],axis=0) ## Update with news data you have
-average_news_df=pd.DataFrame(news_df.groupby(['Ticker','date'])['avg_sentiment_score'].agg(lambda x: np.mean(x)))
-average_news_df.reset_index(inplace=True)
+#Merging all news sentiment data together
+list_news_df=[]
+for ticker in tickers_no_voo:
+    news_data=pd.read_csv(f'{ticker.lower()}_news_sentiment.csv')
+    news_data['date'] = pd.to_datetime(news_data['time_published'], format='%Y%m%dT%H%M%S').dt.strftime('%Y-%m-%d')
 
-#Prepping dictionary for Plotly table display
+    daily_avg_sentiment_score = news_data.groupby('date')['ticker_sentiment_score'].mean().reset_index()
+    daily_avg_sentiment_score = daily_avg_sentiment_score.rename(columns={'ticker_sentiment_score': 'avg_sentiment_score'})
+    sentiment_counts = news_data.groupby(['date', 'ticker_sentiment_label']).size().unstack(fill_value=0)
+    sentiment_proportions = sentiment_counts.div(sentiment_counts.sum(axis=1), axis=0) * 100
+    sentiment_proportions = sentiment_proportions.reset_index()
+    sentiment_counts=sentiment_counts.rename(columns={'Bearish':'Bearish Count',
+                                                     'Bullish':'Bullish Count',
+                                                     'Neutral':'Neutral Count',
+                                                     'Somewhat-Bearish':'Somewhat-Bearish Count',
+                                                     'Somewhat-Bullish':'Somewhat-Bullish Count'
+                                                    }
+                                           )
+
+    daily_sentiment_summary = pd.merge(pd.merge(daily_avg_sentiment_score, sentiment_proportions, on='date', how='left'),sentiment_counts,on='date',how='left')
+    daily_sentiment_summary['Ticker']=ticker
+    list_news_df.append(daily_sentiment_summary)
+
+news_sent_df=pd.concat(list_news_df,axis=0)
+news_sent_df.set_index(['date'],inplace=True)
+news_sent_df['Total Count']=np.sum(news_sent_df[['Bearish Count','Bullish Count','Neutral Count','Somewhat-Bearish Count','Somewhat-Bullish Count']],axis=1)
+
+#prepping dictionary for Plotly table display
 sentiment_for_plot = {
-    ticker: {"Metric":["Today", "Yesterday", "Last 3 Days", "Past Week", "Past 2 Weeks"],
-        "Average News Sentiment Score": [
-        np.round(average_news_df[average_news_df['Ticker']==ticker].iloc[-1]['avg_sentiment_score'],3),
-        np.round(average_news_df[average_news_df['Ticker']==ticker].iloc[-2]['avg_sentiment_score'],3),
-        np.round(np.average(average_news_df[average_news_df['Ticker']==ticker].iloc[-3:]['avg_sentiment_score']),3),  
-        np.round(np.average(average_news_df[average_news_df['Ticker']==ticker].iloc[-7:]['avg_sentiment_score']),3),
-        np.round(np.average(average_news_df[average_news_df['Ticker']==ticker].iloc[-14:]['avg_sentiment_score']),3)
-        ]
+    ticker: {"Metric":
+             ["Today", "Yesterday", "Last 3 Days", "Past Week", "Past 2 Weeks"],
+            "Average News Sentiment Score": [
+                np.round(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-1]['avg_sentiment_score'],2),
+                np.round(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-2]['avg_sentiment_score'],2),
+                np.round(np.average(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-3:]['avg_sentiment_score']),2),  
+                np.round(np.average(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-7:]['avg_sentiment_score']),2),
+                np.round(np.average(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-14:]['avg_sentiment_score']),2)
+            ],
+             "# of News": [
+                 news_sent_df[news_sent_df['Ticker']==ticker].iloc[-1]['Total Count'],
+                 news_sent_df[news_sent_df['Ticker']==ticker].iloc[-2]['Total Count'],
+                 np.sum(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-3:]['Total Count']),
+                 np.sum(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-7:]['Total Count']),
+                 np.sum(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-14:]['Total Count'])
+             ],
+            "Mostly": [
+                (news_sent_df[news_sent_df['Ticker'] == ticker].iloc[-1].iloc[6:11].idxmax()).split()[0],
+                (news_sent_df[news_sent_df['Ticker'] == ticker].iloc[-2].iloc[6:11].idxmax()).split()[0],
+                (news_sent_df[news_sent_df['Ticker'] == ticker].iloc[-3:].sum().iloc[6:11].idxmax()).split()[0],
+                (news_sent_df[news_sent_df['Ticker'] == ticker].iloc[-7:].sum().iloc[6:11].idxmax()).split()[0],
+                (news_sent_df[news_sent_df['Ticker'] == ticker].iloc[-14:].sum().iloc[6:11].idxmax()).split()[0]
+            ]
+             
+    
     }
-    for ticker in df['Ticker'].unique()
+    for ticker in tickers_no_voo 
 }
 
-#Chart set-up
+#Creating chart
 fig = go.Figure()
 
-for ticker in range(len(df['Ticker'].unique())):
+for ticker in tickers_no_voo:
+
+    avg_sentiment=sentiment_for_plot[ticker]["Average News Sentiment Score"]
+    sentiment_colors = [
+        'rgb(255, 102, 102)' if score <= -0.35 else                      # Red for negative scores
+        'rgb(255, 178, 102)' if score >=-0.35 and score < -0.15 else     # Orange for slightly negative scores
+        'rgb(255, 255, 255)' if score >=-0.15 and score < 0.15 else      # White for neutral scores
+        'rgb(153, 255, 153)' if score >= 0.15 and score < 0.35 else      # Light Green for slight positive scores
+        'rgb(102, 204, 102)'                                             # Darker freen for positive scores
+        for score in avg_sentiment
+    ]
+
     fig.add_trace(go.Table(
         header=dict(
-                values=["Metric", "Average News Sentiment Score"],
-            fill_color='lightgray',
+                values=["Metric", "Avg. Sentiment Score","# of News Articles","Mostly"],
+            fill_color='rgba(0, 128, 128, 0.4)',
             font=dict(size=10),
             align='center'
         ),
         cells=dict(
-            values=[sentiment_for_plot[df['Ticker'].unique()[i]]["Metric"], sentiment_for_plot[df['Ticker'].unique()[i]]["Average News Sentiment Score"]],
-            fill_color='white',
+            values=[sentiment_for_plot[ticker]["Metric"], sentiment_for_plot[ticker]["Average News Sentiment Score"],
+                   sentiment_for_plot[ticker]["# of News"], sentiment_for_plot[ticker]["Mostly"]],
+            fill_color=[
+                ['white'] * len(avg_sentiment),  
+                sentiment_colors,        
+                ['white'] * len(avg_sentiment),
+                ['white'] * len(avg_sentiment)
+            ],
             font=dict(size=10),
             align='center'
         )
-    ))
+    )
+    )
 
-#Adding buttons
+
+buttons = []
+for i, ticker in enumerate(tickers_no_voo):
+    visibility = [False] * len(tickers_no_voo)
+    visibility[i] = True
+    buttons.append(
+        dict(
+            label=ticker,
+            method="update",
+            args=[{"visible": visibility},
+                  {"title": f"News Sentiment Scores"}]
+        )
+    )
+
+
 fig.update_layout(
     updatemenus=[
         dict(
-            type="buttons",
+            type="dropdown",
             direction="down",
-            active=0,
-            x=-0.025,
-            y=1,
-            buttons=list([
-                dict(label="ORCL", ## Update with news data you have
-                     method="update",
-                     args=[{"visible": [True, False, False, False]},
-                           {"title": "", #Will Update
-                }]),
-                dict(label="IBM",
-                     method="update",
-                     args=[{"visible": [False, True, False, False]},
-                           {"title": "",#Will Update
-                }]),
-                dict(label="CRM", ## Update with news data you have
-                     method="update",
-                     args=[{"visible": [False, False, True, False]},
-                           {"title": ""#Will Update
-                           }]),
-                dict(label="AVGO", ## Update with news data you have
-                     method="update",
-                     args=[{"visible": [False, False, False, True]},
-                           {"title": ""#Will Update
-                }]),
-            ]),
+            x=0.7,
+            y=1.1,
+            showactive=True,
+            buttons=buttons
         )
     ],
-    width=400,
-    height=400,
+    title="News Sentiment Scores",
+    width=500,
+    height=500,
     margin=dict(l=20, r=20, t=50, b=20)
 )
 
-#Plotting table
 fig.show()
+
+
+
+### Third Visualization (Summary Portfolio Table -  Need real numbers after Yi finishes modeling)
+
+invested_value=500
+portfolio_value=603
+unrealized_percent=np.round(((portfolio_value-invested_value)/portfolio_value)*100,1)
+investment_length=12.3
+
+overview_chart = go.Figure(
+    data=[
+        go.Table(
+            columnwidth=[80, 5, 80,5, 80,5,80],
+            header=dict(
+                values=['Invested Value',
+                        ' ',
+                        'Current Portfolio Value',
+                        ' ', 
+                        'Unrealized Gains', 
+                        ' ', 
+                        'Length of Investment'
+                       ],
+                fill_color=['rgba(0, 128, 128, 0.4)',
+                            'white',
+                            'rgba(0, 128, 128, 0.4)',
+                            'white',
+                            'rgba(0, 128, 128, 0.4)',
+                            'white',
+                            'rgba(0, 128, 128, 0.4)'
+                           ],
+                font=dict(size=20),
+                align='center'
+                        ),
+            cells=dict(
+                values=[
+                    [f'${invested_value}'],
+                    [''],
+                    [f'${portfolio_value}'],
+                    [''],
+                    [f'${portfolio_value-invested_value} ({up_arrow}{unrealized_percent}%)'],
+                    [''],
+                    [f'{investment_length} Months']
+                ],
+                fill_color='white',
+                font=dict(size=18),
+                align='center'
+            )
+        )
+    ]
+)
+
+overview_chart
+
+
+
+
+
+### Fourth Visualization (Portfolio Pie + Bar Charts - Need real numbers after Yi finishes modeling)
+
+up_arrow = '\u2191'
+
+stock_sector_industry=stock_df[['Ticker','Sector','Industry']].drop_duplicates()
+
+portfolio_data = {
+    'Stock': tickers,
+    'Sector':[stock_sector_industry[stock_sector_industry['Ticker']==ticker]['Sector'][0] for ticker in tickers],
+    'Weight': [0.35, 0.17,0.01, 0.19, 0.02, 0.05,0.08, 0.02,0.05,0.1,.01,.02,.02],
+    'Return': [23.22,32.01,9.44,3.19,43.00,0.42,103.12,23,333,33,234,2,44]
+
+}
+portfolio_df=pd.DataFrame(portfolio_data)
+
+pie_return_chart=alt.Chart(portfolio_df).mark_arc(radius=90,radius2=120).encode(
+    theta="Return:Q",
+    color="Stock:N",
+    tooltip=['Stock:N',alt.Tooltip("Weight:Q", format=".0%"),alt.Tooltip('Return:Q',format="$.2f")]
+)
+
+
+total_return_sum = portfolio_df['Return'].sum()  
+
+above_text = alt.Chart(pd.DataFrame({'Total Return': [total_return_sum]})).mark_text(
+    baseline="middle",
+    dy=-18,
+    opacity=0.7
+).encode(
+    text=alt.value("Total Portfolio"),  # Add your own text
+    color=alt.value("black")       # Set text color
+)
+
+center_text = alt.Chart(pd.DataFrame({'Total Return': [total_return_sum]})).mark_text(
+    align='center',
+    baseline='middle',
+    fontSize=20
+).encode(
+    text=alt.Text("Total Return:Q", format="$.2f")
+)
+
+below_text = alt.Chart(pd.DataFrame({'Total Return': [total_return_sum]})).mark_text(
+    baseline="middle",
+    dy=17,
+    opacity=0.5
+).encode(
+    text=alt.value(f"+20{up_arrow}"),  
+    color=alt.value("black")     
+)
+
+
+bar_chart1=alt.Chart(portfolio_df).mark_bar().encode(
+    y=alt.Y('Stock:N',title='',sort=alt.EncodingSortField(field="Return", op="sum", order='descending')),
+    x=alt.X('Return:Q',title='Return by Stock'),
+    color=alt.Color('Stock:N').scale(scheme='tealblues'),
+    tooltip=['Stock:N',alt.Tooltip("Return:Q", format="$.2f")]
+)
+
+bar_chart2=alt.Chart(portfolio_df).mark_bar().encode(
+    y=alt.Y('Sector:N',title='',sort=alt.EncodingSortField(field="Return", op="sum", order='descending')),
+    x=alt.X('Return:Q',title='Return by Sector'),
+    color=alt.Color('Stock:N').scale(scheme='tealblues'),
+    tooltip=['Stock:N',alt.Tooltip("Return:Q", format="$.2f")]
+)
+
+
+# Combine the pie chart with the center text
+combined_pie_chart = pie_return_chart + above_text + center_text + below_text
+return_charts=alt.vconcat(bar_chart1,bar_chart2)
+
+final_pie_bar=combined_pie_chart | return_charts
+
+final_pie_bar
