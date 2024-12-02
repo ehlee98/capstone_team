@@ -106,7 +106,7 @@ economic_data = calculate_mom_change(economic_data, 'sp500', ratio=False)
 
 print(economic_data)
 
-
+#  sentiment_data
 df=pd.read_csv(f"data/{ticker_lowercase}_news_sentiment.csv")
 df['date'] = pd.to_datetime(df['time_published'], format='%Y%m%dT%H%M%S').dt.strftime('%Y-%m-%d')
 
