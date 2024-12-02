@@ -107,17 +107,6 @@ economic_data = calculate_mom_change(economic_data, 'sp500', ratio=False)
 print(economic_data)
 
 
-#  # sentiment_data
-# df1 = pd.read_csv("tesla_2024_news_sentiment.csv")
-# df2 = pd.read_csv("tesla_2023_part1_news_sentiment.csv")
-# df3 = pd.read_csv("tesla_2023_part2_news_sentiment.csv")
-# df4 = pd.read_csv("tesla_2022_part1_news_sentiment.csv")
-# df5 = pd.read_csv("tesla_2022_part2_news_sentiment.csv")
-# df6 = pd.read_csv("tesla_2022_part3_news_sentiment.csv")
-# df7 = pd.read_csv("Tesla_202411_202411_news_sentiment.csv")
-# df = pd.concat([df1, df2, df3, df4, df5, df6,df7], ignore_index=True)
-# df.to_csv("tsla_news_sentiment.csv", index=False)
-
 df=pd.read_csv(f"data/{ticker_lowercase}_news_sentiment.csv")
 df['date'] = pd.to_datetime(df['time_published'], format='%Y%m%dT%H%M%S').dt.strftime('%Y-%m-%d')
 
