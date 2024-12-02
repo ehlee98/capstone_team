@@ -8,10 +8,8 @@ pd.set_option('display.max_colwidth', None)
 
 start_date = "2022-03-01"
 end_date = "2024-11-22"
-
-ticker='VOO'
+ticker='IBM'
 ticker_lowercase = ticker.lower()
-
 
 # price data
 def fetch_and_process_stock_data(symbol, start, end):
@@ -95,33 +93,55 @@ def calculate_mom_change(df, variable_name, ratio=False):
 
 # For percentage change (MoM as ratio)
 economic_data = calculate_mom_change(economic_data, 'interest_rate', ratio=True)
-economic_data = calculate_mom_change(economic_data, 'unemployment_rate', ratio=True)
 economic_data = calculate_mom_change(economic_data, 'gdp_growth', ratio=True)
-economic_data = calculate_mom_change(economic_data, 'vix', ratio=True)
+economic_data = calculate_mom_change(economic_data, 'unemployment_rate', ratio=True)
 
 # For raw difference (absolute MoM change)
-economic_data = calculate_mom_change(economic_data, 'cpi', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'business_investment', ratio=False)
 economic_data = calculate_mom_change(economic_data, 'industrial_production', ratio=False)
-economic_data = calculate_mom_change(economic_data, 'personal_consumption', ratio=False)
-economic_data = calculate_mom_change(economic_data, 'housing_starts', ratio=False)
-economic_data = calculate_mom_change(economic_data, 'retail_sales', ratio=False)
-economic_data = calculate_mom_change(economic_data, 'sp500', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'enterprise_software_spending', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'global_trade_volume', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'corporate_earnings', ratio=False)
 
+df=pd.read_csv(f"data/{ticker_lowercase}_news_sentiment.csv")
+
+df['date'] = pd.to_datetime(df['time_published'], format='%Y%m%dT%H%M%S').dt.strftime('%Y-%m-%d')
+
+daily_avg_sentiment_score = df.groupby('date')['ticker_sentiment_score'].mean().reset_index()
+daily_avg_sentiment_score = daily_avg_sentiment_score.rename(columns={'ticker_sentiment_score': 'avg_sentiment_score'})
+sentiment_counts = df.groupby(['date', 'ticker_sentiment_label']).size().unstack(fill_value=0)
+sentiment_proportions = sentiment_counts.div(sentiment_counts.sum(axis=1), axis=0) * 100
+sentiment_proportions = sentiment_proportions.reset_index()
+daily_sentiment_summary = pd.merge(daily_avg_sentiment_score, sentiment_proportions, on='date', how='left')
+
+sentiment_mapping = {
+    'Bearish': -1,
+    'Somewhat-Bearish': -0.5,
+    'Neutral': 0,
+    'Somewhat-Bullish': 0.5,
+    'Bullish': 1
+}
+daily_sentiment_summary['daily_sentiment_score'] = (
+    daily_sentiment_summary['Bearish'] * sentiment_mapping['Bearish'] +
+    daily_sentiment_summary['Somewhat-Bearish'] * sentiment_mapping['Somewhat-Bearish'] +
+    daily_sentiment_summary['Neutral'] * sentiment_mapping['Neutral'] +
+    daily_sentiment_summary['Somewhat-Bullish'] * sentiment_mapping['Somewhat-Bullish'] +
+    daily_sentiment_summary['Bullish'] * sentiment_mapping['Bullish']
+)
+daily_sentiment_summary.rename(columns={'date': 'Date'}, inplace=True)
 # Display the result
 
 stock_data.columns = ['_'.join(filter(None, col)).strip() for col in stock_data.columns]
 stock_data=stock_data.reset_index()
 stock_data['Date'] = pd.to_datetime(stock_data['Date'])
 economic_data['Date'] = pd.to_datetime(economic_data['Date'])
+daily_sentiment_summary['Date'] = pd.to_datetime(daily_sentiment_summary['Date'])
 selected_columns = ['Date'] + [col for col in economic_data.columns if col.endswith('_mom')]
 
 prepared_data = (
     stock_data.reset_index()
     .merge(economic_data[selected_columns], on='Date', how='left')  # Join with table2
+    .merge(daily_sentiment_summary[['Date', 'daily_sentiment_score']], on='Date', how='left')  # Join with table3
 )
 
 prepared_data.to_csv(f'data/{ticker_lowercase}_prepared_data.csv', index=False)
-
-
-
-

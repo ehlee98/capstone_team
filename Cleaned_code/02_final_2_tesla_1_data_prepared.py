@@ -8,10 +8,8 @@ pd.set_option('display.max_colwidth', None)
 
 start_date = "2022-03-01"
 end_date = "2024-11-22"
-
-ticker='VOO'
+ticker='TSLA'
 ticker_lowercase = ticker.lower()
-
 
 # price data
 def fetch_and_process_stock_data(symbol, start, end):
@@ -55,7 +53,6 @@ stock_data = add_technical_indicators(stock_data)
 # economic_data
 economic_data = pd.read_csv(f"data/economic_data_{ticker}.csv")
 
-
 def calculate_mom_change(df, variable_name, ratio=False):
     """
     Calculate month-over-month change for a given variable in a daily DataFrame.
@@ -97,31 +94,70 @@ def calculate_mom_change(df, variable_name, ratio=False):
 economic_data = calculate_mom_change(economic_data, 'interest_rate', ratio=True)
 economic_data = calculate_mom_change(economic_data, 'unemployment_rate', ratio=True)
 economic_data = calculate_mom_change(economic_data, 'gdp_growth', ratio=True)
-economic_data = calculate_mom_change(economic_data, 'vix', ratio=True)
 
 # For raw difference (absolute MoM change)
 economic_data = calculate_mom_change(economic_data, 'cpi', ratio=False)
 economic_data = calculate_mom_change(economic_data, 'industrial_production', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'vehicle_sales', ratio=False)
 economic_data = calculate_mom_change(economic_data, 'personal_consumption', ratio=False)
-economic_data = calculate_mom_change(economic_data, 'housing_starts', ratio=False)
-economic_data = calculate_mom_change(economic_data, 'retail_sales', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'retail_sales_auto', ratio=False)
+economic_data = calculate_mom_change(economic_data, 'crude_oil_prices', ratio=False)
 economic_data = calculate_mom_change(economic_data, 'sp500', ratio=False)
 
+print(economic_data)
+
+
+#  # sentiment_data
+# df1 = pd.read_csv("tesla_2024_news_sentiment.csv")
+# df2 = pd.read_csv("tesla_2023_part1_news_sentiment.csv")
+# df3 = pd.read_csv("tesla_2023_part2_news_sentiment.csv")
+# df4 = pd.read_csv("tesla_2022_part1_news_sentiment.csv")
+# df5 = pd.read_csv("tesla_2022_part2_news_sentiment.csv")
+# df6 = pd.read_csv("tesla_2022_part3_news_sentiment.csv")
+# df7 = pd.read_csv("Tesla_202411_202411_news_sentiment.csv")
+# df = pd.concat([df1, df2, df3, df4, df5, df6,df7], ignore_index=True)
+# df.to_csv("tsla_news_sentiment.csv", index=False)
+
+df=pd.read_csv(f"data/{ticker_lowercase}_news_sentiment.csv")
+df['date'] = pd.to_datetime(df['time_published'], format='%Y%m%dT%H%M%S').dt.strftime('%Y-%m-%d')
+
+daily_avg_sentiment_score = df.groupby('date')['ticker_sentiment_score'].mean().reset_index()
+daily_avg_sentiment_score = daily_avg_sentiment_score.rename(columns={'ticker_sentiment_score': 'avg_sentiment_score'})
+sentiment_counts = df.groupby(['date', 'ticker_sentiment_label']).size().unstack(fill_value=0)
+sentiment_proportions = sentiment_counts.div(sentiment_counts.sum(axis=1), axis=0) * 100
+sentiment_proportions = sentiment_proportions.reset_index()
+daily_sentiment_summary = pd.merge(daily_avg_sentiment_score, sentiment_proportions, on='date', how='left')
+
+sentiment_mapping = {
+    'Bearish': -1,
+    'Somewhat-Bearish': -0.5,
+    'Neutral': 0,
+    'Somewhat-Bullish': 0.5,
+    'Bullish': 1
+}
+daily_sentiment_summary['daily_sentiment_score'] = (
+    daily_sentiment_summary['Bearish'] * sentiment_mapping['Bearish'] +
+    daily_sentiment_summary['Somewhat-Bearish'] * sentiment_mapping['Somewhat-Bearish'] +
+    daily_sentiment_summary['Neutral'] * sentiment_mapping['Neutral'] +
+    daily_sentiment_summary['Somewhat-Bullish'] * sentiment_mapping['Somewhat-Bullish'] +
+    daily_sentiment_summary['Bullish'] * sentiment_mapping['Bullish']
+)
+daily_sentiment_summary.rename(columns={'date': 'Date'}, inplace=True)
 # Display the result
 
 stock_data.columns = ['_'.join(filter(None, col)).strip() for col in stock_data.columns]
 stock_data=stock_data.reset_index()
 stock_data['Date'] = pd.to_datetime(stock_data['Date'])
 economic_data['Date'] = pd.to_datetime(economic_data['Date'])
+daily_sentiment_summary['Date'] = pd.to_datetime(daily_sentiment_summary['Date'])
 selected_columns = ['Date'] + [col for col in economic_data.columns if col.endswith('_mom')]
 
 prepared_data = (
     stock_data.reset_index()
     .merge(economic_data[selected_columns], on='Date', how='left')  # Join with table2
+    .merge(daily_sentiment_summary[['Date', 'daily_sentiment_score']], on='Date', how='left')  # Join with table3
 )
 
 prepared_data.to_csv(f'data/{ticker_lowercase}_prepared_data.csv', index=False)
-
-
 
 
