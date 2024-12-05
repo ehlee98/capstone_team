@@ -1,0 +1,2 @@
+MSE,RMSE,MAE,R²,Directional Accuracy (%),ticker,variable_method,model_name
+6.932100775410884,2.6328882952778083,1.8796751317783091,0.9854359373050232,52.76967930029155,cof,price_alone,arimax

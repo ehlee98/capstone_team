@@ -1,0 +1,17 @@
+Variable,Importance,ticker
+volatility_10,0.44760274475993356,cof
+revolving_credit_mom,0.18936662636770052,cof
+personal_savings_rate_mom,0.12442362460205914,cof
+ema_10,0.09617515941135935,cof
+cpi_mom,0.0879387136483274,cof
+daily_sentiment_score,0.0109554609953193,cof
+ma_10,-0.019544707083696267,cof
+ma_30,-0.04041345817677211,cof
+gdp_growth_mom,-0.04244701971038012,cof
+retail_sales_mom,-0.05954496895719785,cof
+delinquency_rate_mom,-0.11855230211222079,cof
+rsi_14,-0.25338121634194977,cof
+consumer_sentiment_mom,-0.3522525547268742,cof
+housing_starts_mom,-0.4253952788785682,cof
+interest_rate_mom,-0.66644030684256,cof
+unemployment_rate_mom,-1.235902528402221,cof
