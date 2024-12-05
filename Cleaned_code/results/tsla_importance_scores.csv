@@ -1,0 +1,17 @@
+Variable,Importance,ticker
+ema_10,0.9927983557572588,tsla
+industrial_production_mom,0.9068339750156156,tsla
+rsi_14,0.6289951062062755,tsla
+ma_10,0.6254358484438853,tsla
+retail_sales_auto_mom,0.5619063295598608,tsla
+vehicle_sales_mom,0.28155686720856465,tsla
+unemployment_rate_mom,0.12270814074145164,tsla
+personal_consumption_mom,0.07058064088050742,tsla
+daily_sentiment_score,-0.005251868118648417,tsla
+interest_rate_mom,-0.09855007516307523,tsla
+gdp_growth_mom,-0.13318478137080092,tsla
+volatility_10,-0.17623227232979843,tsla
+sp500_mom,-0.6169556846798514,tsla
+cpi_mom,-0.6283889831684064,tsla
+ma_30,-0.6678021852130769,tsla
+crude_oil_prices_mom,-0.7939749643192044,tsla
