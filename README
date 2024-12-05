@@ -26,25 +26,34 @@ pip install -r requirements.txt
 See Data Access Statement in the details.
 
 3. Run Code
-Refer to the cleaned code folderwhich follow a naming convention indicating their execution sequence. 
+Refer to the cleaned code folder which follow a naming convention indicating their execution sequence. 
 The first two characters in the file names specify the order in which the files should be executed.
 
-3.1 Data Preparation:
+3.1 Data Collection:
+File: 00_get_econ_sentiment_by_api.py
+Purpose: obtain economic data and news sentiment data from API
+command to run: python 00_get_econ_sentiment_by_api.py
+Outputs: data saved in the data/ directory.
+
+3.2 Data Preparation:
 File: 01_final_1_voo_1_data_prepared.py
+(and 02_final_2_tsla_1_data_prepared.py,...,13_final_13_regn_1_data_prepared.py)
 Purpose: Fetch and preprocess the necessary data, including economic and sentiment data.
 Command to run: python 01_final_1_voo_1_data_prepared.py
 Outputs: Cleaned datasets saved in the data/ directory.
 
-3.2 Model Training and Evaluation:
-File: 02_final_voo_train_models.py
+3.3 Model Training and Evaluation:
+File: 14_final_1_voo_2_model_1_price_alone.py
+(and 15_final_1_voo_2_model_2_all_variables.py,...,39_final_13_regn_2_model_2_all_variables.py)
 Purpose: Train LSTM, ARIMA, and hybrid models (e.g., LSTM-XGBoost).
-Command to run: python 02_final_voo_train_models.py
+Command to run: python 14_final_1_voo_2_model_1_price_alone.py
 Outputs: Trained models saved in the models/ directory and Evaluation metrics logged.
 
-3.3 Results and Visualization:
-File: 03_final_voo_results_analysis.py
+3.4 Results and Visualization:
+File: 40_final_summary_results.py
+(and 41_final_trading_strategy.py and Visualizations.py)
 Purpose: Generate predictions, calculate metrics (e.g., MSE, R²), and create figures.
-Command to run: python 03_final_voo_results_analysis.py
+Command to run: python 40_final_summary_results.py
 Outputs: Predictions saved as CSV files in the results/ directory and Plots and figures saved in the figures/ directory.
 
 4. Output
