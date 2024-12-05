@@ -1,0 +1,13 @@
+Variable,Importance,ticker
+interest_rate_mom,0.18662268485422828,ilmn
+consumer_sentiment_mom,0.1048300308175385,ilmn
+ma_10,0.09332428958077799,ilmn
+volatility_10,0.05391328853875166,ilmn
+rsi_14,0.002102678790834034,ilmn
+daily_sentiment_score,-0.011547549191163853,ilmn
+pharmaceutical_prices_mom,-0.07572129723484977,ilmn
+ema_10,-0.07710985588710173,ilmn
+gdp_growth_mom,-0.10035276685084682,ilmn
+ma_30,-0.11914570349108544,ilmn
+m2_money_supply_mom,-0.15665487694423064,ilmn
+unemployment_rate_mom,-0.2065141879793373,ilmn
