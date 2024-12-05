@@ -1,0 +1,15 @@
+Variable,Importance,ticker
+consumer_sentiment_mom,0.2695398021642177,orcl
+rsi_14,0.2217110353813041,orcl
+business_investment_mom,0.20053154376728344,orcl
+m2_money_supply_mom,0.18534314069256652,orcl
+industrial_production_mom,0.1790558900574979,orcl
+volatility_10,0.1084612931990705,orcl
+software_spending_mom,0.10041514313707012,orcl
+interest_rate_mom,0.06166308491083328,orcl
+daily_sentiment_score,0.02377707812411245,orcl
+gdp_growth_mom,-0.04941962442899239,orcl
+corporate_earnings_mom,-0.0703138522185327,orcl
+ma_10,-0.12801924172163126,orcl
+ma_30,-0.21784603036212502,orcl
+ema_10,-0.33415108861299814,orcl
