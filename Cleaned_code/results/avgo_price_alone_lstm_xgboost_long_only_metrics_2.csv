@@ -1,0 +1,2 @@
+Final Capital ($),Total Buy Transactions,Total Short Transactions,Volatility (Annualized),Value at Risk (VaR) at 95%,ticker,variable_method,model_name,trading_strategy
+106.56280120187465,28,0,0.07893990477156844,0.0,avgo,price_alone,lstm_xgboost,long_only

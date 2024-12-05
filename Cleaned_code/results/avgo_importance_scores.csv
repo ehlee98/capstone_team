@@ -1,0 +1,16 @@
+Variable,Importance,ticker
+industrial_production_mom,0.6487467887345701,avgo
+global_trade_volume_mom,0.25054858169096406,avgo
+consumer_sentiment_mom,0.0959007672718144,avgo
+interest_rate_mom,0.08426078797856462,avgo
+semiconductor_shipments_mom,0.035146230104146525,avgo
+personal_computing_sales_mom,0.007977451812621439,avgo
+ma_30,0.007409027486573905,avgo
+gdp_growth_mom,0.006357332091283752,avgo
+rsi_14,-0.007711628764809575,avgo
+daily_sentiment_score,-0.008174972448614426,avgo
+crude_oil_prices_mom,-0.024470063242915785,avgo
+m2_money_supply_mom,-0.026276283690094715,avgo
+ema_10,-0.06052975344573497,avgo
+volatility_10,-0.070690768865461,avgo
+ma_10,-0.26328704757543164,avgo
