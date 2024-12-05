@@ -1,0 +1,2 @@
+Final Capital ($),Total Buy Transactions,Total Short Transactions,Volatility (Annualized),Value at Risk (VaR) at 95%,ticker,variable_method,model_name,trading_strategy
+149.82973141098697,130,59,11.984100225001903,-2.0,ibm,price_alone,arimax,both

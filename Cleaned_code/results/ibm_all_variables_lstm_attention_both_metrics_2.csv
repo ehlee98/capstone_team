@@ -1,0 +1,2 @@
+Final Capital ($),Total Buy Transactions,Total Short Transactions,Volatility (Annualized),Value at Risk (VaR) at 95%,ticker,variable_method,model_name,trading_strategy
+106.61953902396408,14,8,5.350677044768118,-0.011215441489222419,ibm,all_variables,lstm_attention,both

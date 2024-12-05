@@ -1,0 +1,15 @@
+Variable,Importance,ticker
+rsi_14,0.20096736785490066,ibm
+daily_sentiment_score,0.04099411617789883,ibm
+corporate_earnings_mom,-0.011589668196393177,ibm
+enterprise_software_spending_mom,-0.09159262627508724,ibm
+ma_10,-0.15205240940849762,ibm
+gdp_growth_mom,-0.18126678224507486,ibm
+volatility_10,-0.2596128749210038,ibm
+global_trade_volume_mom,-0.3303550717464532,ibm
+interest_rate_mom,-0.33435072770225815,ibm
+ema_10,-0.3694169219088508,ibm
+ma_30,-0.40954224560118746,ibm
+industrial_production_mom,-0.44980008134734817,ibm
+business_investment_mom,-0.5068772937229369,ibm
+unemployment_rate_mom,-0.8245888601231854,ibm
