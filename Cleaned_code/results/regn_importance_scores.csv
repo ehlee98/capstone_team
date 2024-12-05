@@ -1,0 +1,13 @@
+Variable,Importance,ticker
+rsi_14,3.677456558216363,regn
+interest_rate_mom,1.016551615204662,regn
+unemployment_rate_mom,0.9697282004635781,regn
+volatility_10,0.7610198077745736,regn
+m2_money_supply_mom,0.5981831173412502,regn
+consumer_sentiment_mom,0.5558190424926579,regn
+ema_10,0.18748295516707003,regn
+ma_30,0.12559718382544816,regn
+pharmaceutical_prices_mom,0.12501182430423796,regn
+daily_sentiment_score,-0.24325996031984687,regn
+ma_10,-0.5356232393532991,regn
+gdp_growth_mom,-0.6260425364598632,regn
