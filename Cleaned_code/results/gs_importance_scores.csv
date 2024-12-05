@@ -1,0 +1,17 @@
+Variable,Importance,ticker
+ema_10,1.2185825756168924,gs
+m2_money_supply_mom,0.9707474245515186,gs
+commercial_loans_mom,0.3231382736994419,gs
+cpi_mom,0.10388132120715454,gs
+gdp_growth_mom,0.0643384721770417,gs
+ma_10,0.005573362956056371,gs
+industrial_production_mom,-0.0038745039782952517,gs
+daily_sentiment_score,-0.039151554432464764,gs
+ma_30,-0.04402360611129552,gs
+rsi_14,-0.09558978138375096,gs
+interest_rate_mom,-0.11119991893065162,gs
+corporate_bond_spread_mom,-0.15674157056491822,gs
+sp500_mom,-0.1613188076298684,gs
+volatility_10,-0.1727499645203352,gs
+unemployment_rate_mom,-0.3417552431637887,gs
+stock_market_volatility_mom,-0.4965683762857225,gs
