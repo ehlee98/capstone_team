@@ -51,7 +51,7 @@ def add_technical_indicators(df):
 stock_data = add_technical_indicators(stock_data)
 
 # economic_data
-economic_data = pd.read_csv(f"data/economic_data_{ticker}.csv")
+economic_data = pd.read_csv(f"data/{ticker_lowercase}_economic_data.csv")
 
 
 def calculate_mom_change(df, variable_name, ratio=False):
@@ -144,5 +144,6 @@ prepared_data = (
     .merge(economic_data[selected_columns], on='Date', how='left')  # Join with table2
     .merge(daily_sentiment_summary[['Date', 'daily_sentiment_score']], on='Date', how='left')  # Join with table3
 )
+
 
 prepared_data.to_csv(f'data/{ticker_lowercase}_prepared_data.csv', index=False)

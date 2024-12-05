@@ -51,7 +51,7 @@ def add_technical_indicators(df):
 stock_data = add_technical_indicators(stock_data)
 
 # economic_data
-economic_data = pd.read_csv(f"data/economic_data_{ticker}.csv")
+economic_data = pd.read_csv(f"data/{ticker_lowercase}_economic_data.csv")
 
 def calculate_mom_change(df, variable_name, ratio=False):
     """
@@ -106,7 +106,9 @@ economic_data = calculate_mom_change(economic_data, 'sp500', ratio=False)
 
 print(economic_data)
 
-#  sentiment_data
+
+#  # sentiment_data
+
 df=pd.read_csv(f"data/{ticker_lowercase}_news_sentiment.csv")
 df['date'] = pd.to_datetime(df['time_published'], format='%Y%m%dT%H%M%S').dt.strftime('%Y-%m-%d')
 

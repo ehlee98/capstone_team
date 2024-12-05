@@ -8,10 +8,8 @@ pd.set_option('display.max_colwidth', None)
 
 start_date = "2022-03-01"
 end_date = "2024-11-22"
-
 ticker='VOO'
 ticker_lowercase = ticker.lower()
-
 
 # price data
 def fetch_and_process_stock_data(symbol, start, end):
@@ -53,8 +51,7 @@ def add_technical_indicators(df):
 stock_data = add_technical_indicators(stock_data)
 
 # economic_data
-economic_data = pd.read_csv(f"data/economic_data_{ticker}.csv")
-
+economic_data = pd.read_csv(f"data/{ticker_lowercase}_economic_data.csv")
 
 def calculate_mom_change(df, variable_name, ratio=False):
     """
@@ -107,6 +104,9 @@ economic_data = calculate_mom_change(economic_data, 'housing_starts', ratio=Fals
 economic_data = calculate_mom_change(economic_data, 'retail_sales', ratio=False)
 economic_data = calculate_mom_change(economic_data, 'sp500', ratio=False)
 
+print(economic_data)
+
+
 # Display the result
 
 stock_data.columns = ['_'.join(filter(None, col)).strip() for col in stock_data.columns]
@@ -118,10 +118,8 @@ selected_columns = ['Date'] + [col for col in economic_data.columns if col.endsw
 prepared_data = (
     stock_data.reset_index()
     .merge(economic_data[selected_columns], on='Date', how='left')  # Join with table2
+
 )
 
 prepared_data.to_csv(f'data/{ticker_lowercase}_prepared_data.csv', index=False)
-
-
-
 
