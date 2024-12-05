@@ -1,0 +1,16 @@
+Variable,Importance,ticker
+consumer_spending_mom,0.29881093772200984,nke
+volatility_10,0.2397048958537198,nke
+unemployment_rate_mom,0.22732177360830974,nke
+ema_10,0.21370546329217177,nke
+crude_oil_prices_mom,0.10122600542308646,nke
+daily_sentiment_score,0.09491370189880399,nke
+global_trade_volume_mom,0.08823798293087748,nke
+interest_rate_mom,0.06309086762485094,nke
+ma_10,0.05451496158275404,nke
+import_prices_mom,0.022975667890932527,nke
+ma_30,-0.04715593954551878,nke
+consumer_sentiment_mom,-0.1041104052492301,nke
+retail_sales_mom,-0.130106164215249,nke
+gdp_growth_mom,-0.16833566956393042,nke
+rsi_14,-0.1923468560908077,nke
