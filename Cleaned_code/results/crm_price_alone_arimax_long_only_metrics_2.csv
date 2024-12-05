@@ -1,0 +1,2 @@
+Final Capital ($),Total Buy Transactions,Total Short Transactions,Volatility (Annualized),Value at Risk (VaR) at 95%,ticker,variable_method,model_name,trading_strategy
+110.57261605178952,126,0,0.1743677468136318,-0.013464094927274859,crm,price_alone,arimax,long_only
