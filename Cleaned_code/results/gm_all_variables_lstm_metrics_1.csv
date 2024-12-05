@@ -1,0 +1,2 @@
+MSE,RMSE,MAE,R²,Directional Accuracy (%),ticker,variable_method,model_name
+6.607340840611305,2.5395243644102274,2.094591382761814,0.23787124374912136,50.925925925925924,gm,all_variables,lstm

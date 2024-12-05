@@ -1,0 +1,16 @@
+Variable,Importance,ticker
+unemployment_rate_mom,0.14477265756750057,gm
+consumer_spending_mom,0.0780071374997533,gm
+interest_rate_mom,0.06945876967301956,gm
+consumer_sentiment_mom,0.06284030791857731,gm
+volatility_10,0.05443088870151769,gm
+ma_30,0.01721639078868975,gm
+daily_sentiment_score,0.0055352185768242634,gm
+rsi_14,-0.0030700119568791706,gm
+gdp_growth_mom,-0.01214704832955249,gm
+ema_10,-0.01814508380539337,gm
+ma_10,-0.024633751565943385,gm
+vehicle_sales_mom,-0.1009965289658794,gm
+industrial_production_mom,-0.11008476603910822,gm
+crude_oil_prices_mom,-0.11602809192436325,gm
+retail_sales_vehicles_mom,-0.21214561169972512,gm
