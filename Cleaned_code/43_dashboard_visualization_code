@@ -1,0 +1,803 @@
+import pandas as pd 
+import numpy as np
+import altair as alt
+import vega_datasets
+from vega_datasets import data
+from datetime import datetime
+import yfinance as yf
+
+
+
+
+
+### Prepping Data
+
+alt.data_transformers.disable_max_rows()
+
+start_date = "2022-03-01"
+end_date = "2024-11-22"
+tickers=['AVGO','COF','CRM','IBM','ORCL','TSLA','GS','NVDA','NKE','GM','ILMN','REGN','VOO']
+tickers_no_voo=['AVGO','COF','CRM','IBM','ORCL','TSLA','GS','NVDA','NKE','GM','ILMN','REGN']
+
+
+#Function to pull stock data
+def fetch_and_process_stock_data(symbol, start, end):
+    df = yf.download(symbol, start=start, end=end)
+    df.index = pd.to_datetime(df.index)
+    df.index = df.index.strftime('%Y-%m-%d')
+    df['Adj_Closed_price'] = df['Adj Close']
+    df['Closed_price'] = df['Close']
+    df['Open_price'] = df['Open']
+    df['Log_Return'] = np.log(df['Adj_Closed_price'] / df['Adj_Closed_price'].shift(1))
+    df['Adj_Open_price'] = df['Open_price'] * (df['Adj_Closed_price'] / df['Closed_price'])
+    # only use Next_day_Adj_Open_price for measurement, drop it for model building to prevent data leakage
+    df['Next_day_Adj_Open_price'] = df['Adj_Open_price'].shift(-1)
+    df_result = df[['Adj_Closed_price','Closed_price','Log_Return','Next_day_Adj_Open_price']].copy()
+    df_result = df_result.reset_index().rename(columns={'index': 'Date'})
+    return df_result
+    
+def download_stock_data(tickers, start_date, end_date):
+    stock_data=[]
+    for ticker in tickers:
+        data=fetch_and_process_stock_data(ticker, start_date, end_date)
+        data['Ticker']=ticker
+        data['Stock Name']=yf.Ticker(ticker).info['shortName']
+        if (ticker!='VOO'):
+            data['Sector']=yf.Ticker(ticker).info['sector']
+            data['Industry']=yf.Ticker(ticker).info['industry']
+        else:
+            data['Sector']='S&P 500'
+            data['Industry']='S&P 500'
+        stock_data.append(data)
+    return pd.concat(stock_data,axis=0)
+
+def add_technical_indicators(df):
+    # # Moving Averages based on Adjusted Close
+    df['ma_10'] = df['Adj_Closed_price'].rolling(window=10).mean()
+    df['ma_30'] = df['Adj_Closed_price'].rolling(window=30).mean()
+    # # Exponential Moving Average based on Adjusted Close
+    df['ema_10'] = df['Adj_Closed_price'].ewm(span=10, adjust=False).mean()
+    # # Volatility - Standard Deviation of log returns
+    df['volatility_10'] = df['Log_Return'].rolling(window=10).std()
+    # # Relative Strength Index (RSI) based on Adjusted Close
+    delta = df['Adj_Closed_price'].diff(1)
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['rsi_14'] = 100 - (100 / (1 + rs))
+    # # Fill NaN values with previous values or a constant if needed
+    df = df.ffill().fillna(0)
+    return df
+
+#Downloading data
+stock_download=download_stock_data(tickers, start_date, end_date)
+#stock_download[
+stock_df_sep=[]
+for ticker in tickers:
+    temp_data=stock_download[stock_download['Ticker']==ticker].copy()
+    stock_df_sep.append(add_technical_indicators(temp_data))
+
+stock_df=pd.concat(stock_df_sep, axis=0)
+stock_df
+
+stock_df['Date']= pd.to_datetime(stock_df['Date'])
+stock_df['Days_From_Today']=stock_df.groupby('Ticker').cumcount(ascending=False)
+
+stock_df['Adjusted Closing Price']=stock_df['Adj_Closed_price']
+stock_df['EMA (10 Days)']=stock_df['ema_10']
+stock_df['MA (10 Days)']=stock_df['ma_10']
+
+
+vix_df=fetch_and_process_stock_data(['%5EVIX'], start_date, end_date)
+vix_df.reset_index(inplace=True)
+vix_df['Date']= pd.to_datetime(vix_df['Date'])
+
+# VIX Bins and Corresponding Emojis
+vix_cutoffs=[0,15,20,25,30,300]
+vix_emojis=['😴','🙄','🫣','🫨','😱']
+vix_df['VIX Emoji'] = pd.cut(vix_df['Adj_Closed_price'], bins=vix_cutoffs, labels=vix_emojis, right=False)
+
+# Merged stock_df with vix_df on Date
+merged_df = pd.merge(stock_df, vix_df[['Date','VIX Emoji','Adj_Closed_price']], on='Date', how='left')
+merged_df = merged_df.rename(columns={'Adj_Closed_price_y': 'VIX Closing Price'})
+
+
+
+####  First Visualization (Historical Stock Performance - Interactive)
+
+# Defined date slider that adjusts based on days from today
+date_slider = alt.binding_range(
+    name="Days from Today: ",
+    min=stock_df['Days_From_Today'].min()+7,
+    max=stock_df['Days_From_Today'].max(),
+    step=1
+)
+
+# Selection for date_slider
+date_select = alt.selection_point(
+    bind=date_slider,
+    fields=['Days_From_Today'],
+    value=stock_df['Days_From_Today'].min()+7
+)
+
+# Defined ticker symbol drop-down 
+ticker_dropdown = alt.binding_select(
+    options =  tickers,
+    labels =  tickers,
+    name = "Stock Symbol: "
+)
+
+# Created selection for ticker_dropdown
+ticker_select = alt.selection_point(
+    bind=ticker_dropdown,
+    fields=['Ticker'],
+    value='AVGO'
+)
+
+## Created top chart that shows stock closing prices
+base = alt.Chart(stock_df).transform_fold(
+    ['Adjusted Closing Price', 'MA (10 Days)', 'EMA (10 Days)'],
+    as_=['Legend', 'value'] 
+).mark_line().encode(
+    x=alt.X('Date:T'),
+    y=alt.Y('value:Q',
+            title='Adjusted Closing Price'),
+    color=alt.Color('Legend:N',scale=alt.Scale(
+                        domain=['Adjusted Closing Price',
+                                'MA (10 Days)',
+                                'EMA (10 Days)'],
+                        range=['#00008B',
+                               'green',
+                               'red'])),
+    tooltip=['Stock Name:N',
+             'Ticker:N',
+             'Sector:N',
+             'Industry:N',
+             'Date:T', 
+             alt.Tooltip('Adjusted Closing Price:Q', title='Adjusted Closing Price', format='$.2f'),
+             alt.Tooltip('MA (10 Days):Q', title='MA (10 Days)', format='$.2f'),
+             alt.Tooltip('EMA (10 Days):Q', title='EMA (10 Days)', format='$.2f'),
+
+             ],
+    opacity=alt.condition('datum.Legend == "Adjusted Closing Price"',
+                          alt.value(0.9),
+                          alt.value(0.6)),
+    strokeWidth=alt.condition(
+        "datum.value == 'Adjusted Closing Price'",
+        alt.value(3),
+        alt.value(1)
+    )
+).properties(
+    title=' ',
+    width=500,
+    height=300
+    )
+
+
+## Bottom time-serieschart that shows stock's volatility and VIX indicators
+base1 = alt.Chart(merged_df).mark_line().encode(
+    x='Date:T',
+    y=alt.Y('volatility_10:Q',
+            title='Volatility'
+           ),
+    color=alt.value('black'),
+    tooltip=['Ticker:N',
+             'Date:T',
+             alt.Tooltip('volatility_10:Q',title='10 Day Rolling Volatility',format='.2f'),
+             alt.Tooltip('VIX Closing Price:Q',format='$.2f'),'VIX Emoji:N'
+             ],
+    strokeWidth=alt.value(1)
+).properties(width=500, height=75)
+
+# Apply filters to the charts based on the selected ticker and date
+filtered_base = (base).add_params(ticker_select, date_select).transform_filter(
+    ticker_select).transform_filter(
+    alt.datum.Days_From_Today <= date_select['Days_From_Today']
+)
+
+
+filtered_base1 = base1.add_params(ticker_select, date_select).transform_filter(
+    ticker_select
+).transform_filter(
+    alt.datum.Days_From_Today <= date_select['Days_From_Today']
+)
+
+# Combine the two charts vertically
+final_charts = alt.vconcat(filtered_base, filtered_base1).resolve_scale(
+    y='independent'
+).properties(title='Historical Stock Overview')
+
+yfinance_stock_timeseries_charts=final_charts.configure_title(
+    fontSize=20,
+    anchor='start'
+)
+
+#Save file
+##yfinance_stock_timeseries_charts.save('yfinance_stock_timeseries.html', scale_factor=2.0) 
+
+yfinance_stock_timeseries_charts
+
+
+
+
+####  Second Visualization (Economic & News Sentiment Overview - Interactive)
+
+## Data Prep
+list_news_df=[]
+for ticker in tickers_no_voo:
+    news_data=pd.read_csv(f'{ticker.lower()}_news_sentiment.csv')
+    news_data['date'] = pd.to_datetime(news_data['time_published'], format='%Y%m%dT%H%M%S').dt.strftime('%Y-%m-%d')
+
+    daily_avg_sentiment_score = news_data.groupby('date')['ticker_sentiment_score'].mean().reset_index()
+    daily_avg_sentiment_score = daily_avg_sentiment_score.rename(columns={'ticker_sentiment_score': 'avg_sentiment_score'})
+    sentiment_counts = news_data.groupby(['date', 'ticker_sentiment_label']).size().unstack(fill_value=0)
+    sentiment_proportions = sentiment_counts.div(sentiment_counts.sum(axis=1), axis=0) * 100
+    sentiment_proportions = sentiment_proportions.reset_index()
+    sentiment_counts=sentiment_counts.rename(columns={'Bearish':'Bearish Count',
+                                                     'Bullish':'Bullish Count',
+                                                     'Neutral':'Neutral Count',
+                                                     'Somewhat-Bearish':'Somewhat-Bearish Count',
+                                                     'Somewhat-Bullish':'Somewhat-Bullish Count'
+                                                    }
+                                           )
+
+    daily_sentiment_summary = pd.merge(pd.merge(daily_avg_sentiment_score, sentiment_proportions, on='date', how='left'),sentiment_counts,on='date',how='left')
+    daily_sentiment_summary['Ticker']=ticker
+    list_news_df.append(daily_sentiment_summary)
+
+news_sent_df=pd.concat(list_news_df,axis=0)
+news_sent_df.set_index(['date'],inplace=True)
+news_sent_df['Total Count']=np.sum(news_sent_df[['Bearish Count','Bullish Count','Neutral Count','Somewhat-Bearish Count','Somewhat-Bullish Count']],axis=1)
+
+def calculate_mom_change(df, variable_name, ratio=False):
+    """
+    Calculate month-over-month change for a given variable in a daily DataFrame.
+
+    Parameters:
+    - df (pd.DataFrame): DataFrame with a DateTime index and daily values for the specified variable.
+    - variable_name (str): The name of the variable/column to calculate MoM change for.
+    - ratio (bool): If True, calculates month-over-month percentage change; if False, calculates raw difference.
+
+    Returns:
+    - pd.DataFrame: Updated DataFrame with a new column for month-over-month change.
+    """
+    # Ensure date is the index if it's not already
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df['Date'] = pd.to_datetime(df['Date'])
+        df.set_index('Date', inplace=True)
+
+    # Resample to monthly end frequency using the last available value for each month
+    monthly_data = df[variable_name].resample('ME').last().to_frame()
+
+    # Calculate month-over-month change based on ratio flag
+    if ratio:
+        monthly_data[f'{variable_name}_mom'] = monthly_data[variable_name].diff()
+    else:
+        monthly_data[f'{variable_name}_mom'] = monthly_data[variable_name].pct_change(fill_method=None) * 100
+
+    # Merge MoM data back to daily data
+    df = df.merge(monthly_data[[f'{variable_name}_mom']], left_index=True, right_index=True, how='left')
+
+    # Forward-fill the NaN values in the new column to propagate the monthly value across all days in the month
+    df[f'{variable_name}_mom'] = df[f'{variable_name}_mom'].ffill()
+
+    # Reset the index if needed
+    df = df.reset_index()
+
+    return df
+
+def format_with_commas(df):
+    """
+    Format numeric columns of the DataFrame with commas for thousands separators.
+    """
+    # Apply formatting to numeric columns
+    for col in df.select_dtypes(include=['float64', 'int64']).columns:
+        df[col] = df[col].apply(lambda x: "{:,}".format(x) if pd.notnull(x) else x)
+    return df
+
+
+
+dict_econ_df={}
+priority_columns = ['Date', 'Interest Rate', 'Unemployment Rate', 'CPI', 'GDP Growth']
+
+for ticker in tickers:
+    # Read the CSV for each ticker
+    econ_data = pd.read_csv(f'economic_data_{ticker}.csv')
+
+    # Calculate month-over-month change for all columns except 'Date'
+    for col in econ_data.columns:
+        if col != 'Date':
+            econ_data = calculate_mom_change(econ_data, col, ratio=False)
+
+    # Set 'Date' as the index and resample to monthly end
+    econ_data.set_index('Date', inplace=True)
+    econ_data = econ_data.resample('ME').mean()
+    econ_data.reset_index(inplace=True)
+    econ_data['Date'] = pd.to_datetime(econ_data['Date']).dt.strftime('%b-%Y')
+
+    # Remove columns where all values are 0
+    econ_data = econ_data.loc[:, (econ_data != 0).any(axis=0)]
+
+    # Round all numeric columns to 1 decimal places
+    econ_data = econ_data.round(1)
+    econ_data=format_with_commas(econ_data)
+
+
+    # Update columns that end with '_mom' by adding them to the original columns
+    for col in econ_data.columns:
+        if col.endswith('_mom'):
+            original_col = col[:-4]  # Remove '_mom' to find the original column
+            if original_col in econ_data.columns:
+                # Concatenate the original column value with the _mom value in parentheses
+                econ_data[original_col] = econ_data[original_col].astype(str) + " (" + econ_data[col].round(1).astype(str) + "%)"
+                econ_data.drop(col, axis=1, inplace=True)  # Drop the '_mom' column after concatenating
+
+    econ_data.columns = [col.replace('_', ' ').title() if col.lower() != 'cpi' else col.upper() for col in econ_data.columns]
+
+    priority_columns_sorted = [col for col in econ_data.columns if any(col.startswith(prefix) for prefix in priority_columns)]
+    remaining_columns = [col for col in econ_data.columns if not any(col.startswith(prefix) for prefix in priority_columns)]
+    remaining_columns_sorted = sorted(remaining_columns)
+    sorted_columns = priority_columns_sorted + remaining_columns_sorted
+    
+    econ_data = econ_data[sorted_columns]
+    econ_data = econ_data.loc[:, ~econ_data.columns.str.contains('Sp500|Vix')]
+
+    
+    dict_econ_df[ticker] = econ_data.tail(6)
+
+
+# Prep dictionary for Plotly table display
+sentiment_for_plot = {
+    ticker: {"Metric":
+             ["Today", "Yesterday", "Last 3 Days", "Past Week", "Past 2 Weeks"],
+            "Average News Sentiment Score": [
+                np.round(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-1]['avg_sentiment_score'],2),
+                np.round(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-2]['avg_sentiment_score'],2),
+                np.round(np.average(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-3:]['avg_sentiment_score']),2),  
+                np.round(np.average(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-7:]['avg_sentiment_score']),2),
+                np.round(np.average(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-14:]['avg_sentiment_score']),2)
+            ],
+             "# of News": [
+                 news_sent_df[news_sent_df['Ticker']==ticker].iloc[-1]['Total Count'],
+                 news_sent_df[news_sent_df['Ticker']==ticker].iloc[-2]['Total Count'],
+                 np.sum(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-3:]['Total Count']),
+                 np.sum(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-7:]['Total Count']),
+                 np.sum(news_sent_df[news_sent_df['Ticker']==ticker].iloc[-14:]['Total Count'])
+             ],
+            "Mostly": [
+                (news_sent_df[news_sent_df['Ticker'] == ticker].iloc[-1].iloc[6:11].idxmax()).split()[0],
+                (news_sent_df[news_sent_df['Ticker'] == ticker].iloc[-2].iloc[6:11].idxmax()).split()[0],
+                (news_sent_df[news_sent_df['Ticker'] == ticker].iloc[-3:].sum().iloc[6:11].idxmax()).split()[0],
+                (news_sent_df[news_sent_df['Ticker'] == ticker].iloc[-7:].sum().iloc[6:11].idxmax()).split()[0],
+                (news_sent_df[news_sent_df['Ticker'] == ticker].iloc[-14:].sum().iloc[6:11].idxmax()).split()[0]
+            ]
+             
+    
+    }
+    for ticker in tickers_no_voo
+}
+
+fig = go.Figure()
+
+# Prepare the economic data table
+for ticker in tickers_no_voo:
+    fig.add_trace(go.Table(
+        header=dict(
+            values=list(dict_econ_df[ticker].columns),
+            fill_color='rgba(0, 128, 128, 0.4)',
+            font=dict(size=10),
+            align='center'
+        ),
+        cells=dict(
+            values=[dict_econ_df[ticker][col].values for col in dict_econ_df[ticker]],
+            fill_color='white',
+            font=dict(size=10),
+            align='center'
+        ),
+        domain=dict(y=[0.5, 0.97]),
+        visible = ticker == 'AVGO'
+
+    ))
+
+# Prepare the sentiment data table (use your existing `sentiment_for_plot` dictionary)
+for ticker in tickers_no_voo:
+    avg_sentiment = sentiment_for_plot[ticker]["Average News Sentiment Score"]
+    sentiment_colors = [
+        'rgb(255, 102, 102)' if score <= -0.35 else                      # Red for negative scores
+        'rgb(255, 178, 102)' if score >= -0.35 and score < -0.15 else     # Orange for slightly negative scores
+        'rgb(255, 255, 255)' if score >= -0.15 and score < 0.15 else      # White for neutral scores
+        'rgb(153, 255, 153)' if score >= 0.15 and score < 0.35 else      # Light green for slight positive scores
+        'rgb(102, 204, 102)'                                             # Dark green for positive scores
+        for score in avg_sentiment
+    ]
+    fig.add_trace(go.Table(
+        header=dict(
+            values=["Metric", "Avg. Sentiment Score", "# of News Articles", "Mostly"],
+            fill_color='rgba(0, 128, 128, 0.4)',
+            font=dict(size=9),
+            align='center'
+        ),
+        cells=dict(
+            values=[sentiment_for_plot[ticker]["Metric"], 
+                    sentiment_for_plot[ticker]["Average News Sentiment Score"],
+                    sentiment_for_plot[ticker]["# of News"], 
+                    sentiment_for_plot[ticker]["Mostly"]],
+            fill_color=[
+                ['white'] * len(avg_sentiment),  
+                sentiment_colors,        
+                ['white'] * len(avg_sentiment),
+                ['white'] * len(avg_sentiment)
+            ],
+            font=dict(size=8),
+            align='center'
+        ),
+        domain=dict(y=[0,0.55]),
+        visible = ticker == 'AVGO'
+    ))
+
+buttons = []
+
+for i, ticker in enumerate(tickers_no_voo):
+    visibility = [False] * (2 * len(tickers_no_voo))  
+    visibility[i] = True  
+    visibility[len(tickers_no_voo) + i] = True  
+    buttons.append(
+        dict(
+            label=ticker,
+            method="update",
+            args=[{"visible": visibility},
+                  {"title": "Economic Data & News Sentiment Scores"}]
+        )
+    )
+
+# Update layout
+fig.update_layout(
+    updatemenus=[
+        dict(
+            type="dropdown",
+            direction="down",
+            x=0.8,
+            y=1.06,
+            showactive=True,
+            buttons=buttons
+        )
+    ],
+    title="Economic Data & News Sentiment Scores", 
+    title_x=0, 
+    width=800,
+    height=1000,
+    margin=dict(l=20, r=20, t=50, b=20),
+    annotations=[
+        dict(
+            x=0,
+            y=1,
+            xref="paper",
+            yref="paper",
+            text="Economic Indicators", 
+            showarrow=False,
+            font=dict(size=15),
+            align="center"
+        ),
+        dict(
+            x=0,
+            y=0.57,
+            xref="paper",
+            yref="paper",
+            text="News Sentiment Scores",  
+            showarrow=False,
+            font=dict(size=15),
+            align="center"
+        )
+    ],
+    yaxis=dict(scaleanchor="x", showticklabels=False)
+)
+
+fig.write_html("economic_and_news_tables.html")
+
+
+#Display the plot
+fig.show()
+
+
+
+
+### Third Visualization ( Portfolio Overview w/ High-Risk Strategy - Static )
+
+# Variables of High-Risk Strategy
+invested_value=100
+portfolio_value=410.82
+risk_strategy_used='High'
+overview_return=310.82
+unrealized_percent=np.round(((portfolio_value-invested_value)/invested_value)*100,1)
+investment_length=26
+up_arrow = '\u2191'
+
+
+overview_chart = go.Figure(
+    data=[
+        go.Table(
+            columnwidth=[80, 4,80,4,80,4, 80,4,80],
+            header=dict(
+                values=[
+                        'Strategy Used',
+                        ' ', 
+                        'Invested Value',
+                        ' ',
+                        'Total Portfolio Value',
+                        ' ', 
+                        'Unrealized Gains', 
+                        ' ', 
+                        'Investment'
+                       ],
+                fill_color=['rgba(0, 128, 128, 0.4)',
+                            'white',
+                            'rgba(0, 128, 128, 0.4)',
+                            'white',
+                            'rgba(0, 128, 128, 0.4)',
+                            'white',
+                            'rgba(0, 128, 128, 0.4)',
+                            'white',
+                            'rgba(0, 128, 128, 0.4)'
+                           ],
+                font=dict(size=18),
+                align='center',
+                height=50
+                        ),
+            cells=dict(
+                values=[
+                    [f'{risk_strategy_used}-Risk'],
+                    [''],
+                    [f'${invested_value}'],
+                    [''],
+                    [f'${portfolio_value}'],
+                    [''],
+                    [f'${portfolio_value-invested_value} ({up_arrow}{unrealized_percent}%)'],
+                    [''],
+                    [f'{investment_length} Months']
+                ],
+                height=50,
+                fill_color='white',
+                font=dict(size=16),
+                align='center'
+            )
+        )
+    ]
+)
+
+overview_chart.write_html("portfolio_table.html")
+
+overview_chart
+
+
+
+
+
+### Fourth Visualization ( Portfolio Pie + Bar Chart - Interactive)
+
+## Prepping Data
+
+risk_list=['high','medium','low']
+risk_list_with_base=['high','medium','low','base']
+
+risk_grouped=[]
+return_results={}
+portfolio_results={}
+risk_list_with_base=['high','medium','low','base']
+
+for i in risk_list_with_base:
+    if i != 'base':
+        strategy_file=pd.read_csv(f'trading_strategy_{i}_risk.csv')
+        strategy_total_capital=list(strategy_file['Total_Capital'])
+        return_calculated=np.round(strategy_total_capital[-1]-strategy_total_capital[0],2)
+        final_portfolio=np.round(strategy_total_capital[-1],2)
+    else:
+        strategy_file=pd.read_csv(f'trading_strategy_{i}.csv')
+        return_calculated=np.round(strategy_file.iloc[-1,0]-strategy_file.iloc[0,0],2)
+        final_portfolio=np.round(strategy_file.iloc[-1,0],2)
+        
+    return_results[i]=return_calculated
+    portfolio_results[i]=final_portfolio
+
+
+for i in risk_list:
+    initial_risk_df=pd.read_csv(f'trading_strategy_average_portions_{i}_risk.csv')
+    initial_risk_df['Risk Level']=i.capitalize()
+    initial_risk_df['Stock']=initial_risk_df['Stock'].str.split('_Portion').str[0]
+    initial_risk_df['Stock']=initial_risk_df['Stock'].str.upper()
+    initial_risk_df['Return']=return_results[i]
+    initial_risk_df['Final Portfolio']=portfolio_results[i]
+    initial_risk_df['Portfolio Increase (%)']=np.round(return_results[i],1)
+    initial_risk_df['Stock Name']=initial_risk_df['Stock'].apply(lambda x: stock_df[stock_df['Ticker'] == x]['Stock Name'].values[0])
+    initial_risk_df['Sector']=initial_risk_df['Stock'].apply(lambda x: stock_df[stock_df['Ticker'] == x]['Sector'].values[0])
+    risk_grouped.append(initial_risk_df)
+    
+portfolio_df=pd.concat(risk_grouped,axis=0)
+
+VOO_layout = pd.DataFrame([['VOO',1,'Base', return_results['base'] ,portfolio_results['base'],                                                      # Portfolio final value for 'base' risk level
+            np.round(return_results['base'],1) ,stock_df[stock_df['Ticker'] == 'VOO']['Stock Name'].values[0],      
+            stock_df[stock_df['Ticker'] == 'VOO']['Sector'].values[0]]],columns=portfolio_df.columns)
+
+
+portfolio_df=pd.concat([portfolio_df,VOO_layout],axis=0)
+portfolio_df.reset_index(inplace=True,drop=True)
+
+up_arrow = '\u2191'
+
+
+# Defined risk-level drop-down menu
+risk_dropdown = alt.binding_select(
+    options = ['Base','Low','Medium','High'],
+    labels =  ['Base (S&P 500)','Low','Medium','High (Best Result)'],
+    name = "Risk Strategy: "
+)
+
+risk_select = alt.selection_point(
+    bind=risk_dropdown,
+    fields=['Risk Level'],
+    value='Base'
+)
+
+## Pie Chart
+
+# Created portfolio pie-chart 
+pie_return_chart=alt.Chart(portfolio_df).mark_arc(
+    radius=90,
+    radius2=120).encode(
+    theta=alt.Theta("Average Portion:Q", title=''),
+    color=alt.Color("Stock:N",sort=alt.EncodingSortField(
+                        field="Average Portion:Q",
+                        order='descending')
+                   ).scale(scheme='tealblues'),
+    tooltip=['Stock Name:N','Stock:N','Sector:N',alt.Tooltip("Average Portion:Q", format=".0%")]
+).add_params(risk_select).transform_filter(risk_select)
+
+
+## Text Portion
+ 
+# Title
+above_text = alt.Chart().mark_text(
+    baseline="middle",
+    dy=-18,
+    opacity=0.7
+).encode(
+    text=alt.value("Total Portfolio"),  
+    color=alt.value("black")           
+)
+
+# Text w/ Total Portfolio Value
+center_text = alt.Chart(portfolio_df).mark_text(
+    align='center',
+    baseline='middle',
+    fontSize=20,
+    opacity=1
+).encode(
+    text=alt.Text("Final Portfolio:Q", aggregate='mean', format="$.2f")
+).add_params(risk_select).transform_filter(risk_select)
+
+
+# Text showing % Increase
+below_text = alt.Chart(portfolio_df).mark_text(
+    baseline="middle",
+    dy=17,
+    opacity=0.7
+).encode(
+    text=alt.Text('Portfolio Increase (%):Q', aggregate='mean', format=".1%"),
+    color=alt.value("black")       
+).transform_aggregate(
+    mean_inc='mean(Portfolio Increase (%))',
+    groupby=['Risk Level']
+).transform_calculate(
+    label= alt.datum.mean_inc + f'% ({up_arrow})'
+).encode(
+    text=alt.Text('label:N')
+).add_params(risk_select).transform_filter(risk_select)
+
+
+# Created Bar Chart w/ Sectors
+portfolio_bar_chart = alt.Chart(portfolio_df).mark_bar().encode(
+    y=alt.Y('Sector:N',title='',sort=alt.EncodingSortField(
+    field="Average Portion", op="sum", order='descending'),
+           ),
+    x=alt.X('Average Portion:Q',
+    title='Average Return by Stock',axis=alt.Axis(format=".0%")),
+    color=alt.Color('Stock:N').scale(scheme='tealblues'),
+    tooltip=['Stock Name:N','Stock:N','Sector:N',alt.Tooltip("Average Portion:Q", format=".0%")]
+).properties(width=350)
+
+portfolio_bar_chart=portfolio_bar_chart.add_params(risk_select).transform_filter(risk_select)
+
+
+## Combining Charts
+combined_pie_chart = alt.layer(pie_return_chart, (above_text+center_text+ below_text))
+
+portfolio_pie_bar_chart = alt.vconcat(
+    combined_pie_chart,
+    portfolio_bar_chart
+).properties(padding=100)
+
+##portfolio_pie_bar_chart.save('portfolio_pie_bar_chart.html', scale_factor=2.0)
+
+portfolio_pie_bar_chart
+
+
+
+
+
+### Fifth Visualization ( Strategy Performance Time Series Overview - Interactive)
+
+## Data prep
+portfolio_timeline_grouped=[]
+risk_list_with_base=['high','medium','low','base']
+
+for i in risk_list_with_base:
+    if (i != 'base') and (i!='high'):
+        strategy_file = pd.read_csv(f'trading_strategy_{i}_risk.csv')
+        strat_timeline = strategy_file.loc[:,['Date', 'Total_Capital']] 
+        strat_timeline.loc[:, 'Risk Strategy'] = i.capitalize()
+    elif i=='high':
+        strategy_file = pd.read_csv(f'trading_strategy_{i}_risk.csv')
+        strat_timeline = strategy_file.loc[:,['Date', 'Total_Capital']] 
+        strat_timeline.loc[:, 'Risk Strategy'] = 'High (Best Result)'
+    else:
+        strategy_file_base = pd.read_csv('trading_strategy_base.csv')
+        strat_time_date = pd.read_csv(f'trading_strategy_medium_risk.csv')
+        strat_timeline=strategy_file_base.rename(columns={'0':'Total_Capital'})
+        strat_timeline['Date'] = strat_time_date.loc[:,'Date']
+        strat_timeline['Risk Strategy'] = 'Base (S&P 500)' 
+    
+    portfolio_timeline_grouped.append(strat_timeline)
+
+portfolio_strat_timeline=pd.concat(portfolio_timeline_grouped,axis=0)
+
+portfolio_strat_timeline['Unrealized Gain']=portfolio_strat_timeline['Total_Capital']-100
+portfolio_strat_timeline['Total Invested']=100
+portfolio_strat_timeline['Date']= pd.to_datetime(portfolio_strat_timeline['Date'])
+portfolio_strat_timeline['Days_From_Today']=portfolio_strat_timeline.groupby('Risk Strategy').cumcount(ascending=False)
+
+##Chart Building
+
+#Range for date_slider
+date_slider = alt.binding_range(
+    name="Days from Today: ",
+    min=portfolio_strat_timeline['Days_From_Today'].min()+7,
+    max=portfolio_strat_timeline['Days_From_Today'].max(),
+    step=1
+)
+
+# Selection for date_slider
+date_select = alt.selection_point(
+    bind=date_slider,
+    fields=['Days_From_Today'],
+    value=portfolio_strat_timeline['Days_From_Today'].min()+7
+)
+
+
+# Created top chart that shows stock closing prices
+strat_base = alt.Chart(portfolio_strat_timeline).mark_line().encode(
+    x=alt.X('Date:T', title='Date'),
+    y=alt.Y('Total_Capital:Q', title='Portfolio Capital',axis=alt.Axis(format="$.0f")),
+    color='Risk Strategy:N',
+    tooltip=['Risk Strategy:N',
+             'Date:T',
+             alt.Tooltip('Total_Capital:Q',
+                         title='Capital',
+                         format='$.2f'),
+             alt.Tooltip('Unrealized Gain:Q',
+                         title='Unrealized Gain',
+                         format='$.2f')]
+).properties(title=' ',width=500, height=300)
+
+
+strat_timeline_chart = (strat_base).add_params(date_select).transform_filter(
+    alt.datum.Days_From_Today <= date_select['Days_From_Today']
+).properties(title='Strategy Performance Timeline')
+
+
+strat_timeline_chart=strat_timeline_chart.configure_title(
+    fontSize=20,
+    anchor='start'
+)
+
+##strat_timeline_chart.save('strat_timeline_chart.html', scale_factor=2.0)
+
+strat_timeline_chart
