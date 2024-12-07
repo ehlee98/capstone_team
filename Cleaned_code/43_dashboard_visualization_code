@@ -1,11 +1,12 @@
-import pandas as pd 
+import yfinance as yahooFinance
+import pandas as pd
 import numpy as np
-import altair as alt
-import vega_datasets
-from vega_datasets import data
+import plotly.express as px
 from datetime import datetime
-import yfinance as yf
-
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from pandas.plotting import table
+from html2image import Html2Image
 
 
 
@@ -212,9 +213,8 @@ yfinance_stock_timeseries_charts=final_charts.configure_title(
     anchor='start'
 )
 
-#Save file
-##yfinance_stock_timeseries_charts.save('yfinance_stock_timeseries.html', scale_factor=2.0) 
 
+#Show chart
 yfinance_stock_timeseries_charts
 
 
@@ -392,6 +392,8 @@ for ticker in tickers_no_voo:
             values=[dict_econ_df[ticker][col].values for col in dict_econ_df[ticker]],
             fill_color='white',
             font=dict(size=10),
+            line_color='rgba(200, 200, 200, 0.8)',          #Added border
+            line_width=1                                    #Adjusted border width
             align='center'
         ),
         domain=dict(y=[0.5, 0.97]),
@@ -429,7 +431,9 @@ for ticker in tickers_no_voo:
                 ['white'] * len(avg_sentiment)
             ],
             font=dict(size=8),
-            align='center'
+            align='center',
+            line_color='rgba(200, 200, 200, 0.8)',            #Added border
+            line_width=1                                      #Adjusted border width
         ),
         domain=dict(y=[0,0.55]),
         visible = ticker == 'AVGO'
@@ -492,81 +496,77 @@ fig.update_layout(
     yaxis=dict(scaleanchor="x", showticklabels=False)
 )
 
-fig.write_html("economic_and_news_tables.html")
-
-
 #Display the plot
 fig.show()
 
 
 
 
-### Third Visualization ( Portfolio Overview w/ High-Risk Strategy - Static )
 
-# Variables of High-Risk Strategy
-invested_value=100
-portfolio_value=410.82
-risk_strategy_used='High'
-overview_return=310.82
-unrealized_percent=np.round(((portfolio_value-invested_value)/invested_value)*100,1)
-investment_length=26
-up_arrow = '\u2191'
+### Third Visualization ( Portfolio Overview w/ High-Risk Strategy - Interactive )
+# Updated method for a cleaner look
 
+intro=pd.DataFrame({'Risk-Level':['High','Medium','Low','N/A'],
+              'Invested Value (USD)':["$100","$100","$100","$100"],
+              'Total Portfolio Value (USD)':["$410.82","$319.92","$201.54","$158.99"],
+              'Unrealized Gains (USD)':["$310.82","$219.92","$101.54","$58.99"],
+              'Unrealized Gains (%)':[f"310.8% {up_arrow}",f"219.92% {up_arrow}",f"101.5% {up_arrow}",f"59.0% {up_arrow}"],
+              'Length of Investment':["26.2 months","26.2 months","26.2 months","26.2 months"]},index=['Strategy #1','Strategy #2','Strategy #3','Base (S&P 500)'])
 
-overview_chart = go.Figure(
-    data=[
-        go.Table(
-            columnwidth=[80, 4,80,4,80,4, 80,4,80],
-            header=dict(
-                values=[
-                        'Strategy Used',
-                        ' ', 
-                        'Invested Value',
-                        ' ',
-                        'Total Portfolio Value',
-                        ' ', 
-                        'Unrealized Gains', 
-                        ' ', 
-                        'Investment'
-                       ],
-                fill_color=['rgba(0, 128, 128, 0.4)',
-                            'white',
-                            'rgba(0, 128, 128, 0.4)',
-                            'white',
-                            'rgba(0, 128, 128, 0.4)',
-                            'white',
-                            'rgba(0, 128, 128, 0.4)',
-                            'white',
-                            'rgba(0, 128, 128, 0.4)'
-                           ],
-                font=dict(size=18),
-                align='center',
-                height=50
-                        ),
-            cells=dict(
-                values=[
-                    [f'{risk_strategy_used}-Risk'],
-                    [''],
-                    [f'${invested_value}'],
-                    [''],
-                    [f'${portfolio_value}'],
-                    [''],
-                    [f'${portfolio_value-invested_value} ({up_arrow}{unrealized_percent}%)'],
-                    [''],
-                    [f'{investment_length} Months']
-                ],
-                height=50,
-                fill_color='white',
-                font=dict(size=16),
-                align='center'
-            )
-        )
+headers = {
+    'selector': 'th:not(.index_name)',
+    'props': [
+        ('background-color','#AFCCCC'),
+        ('color','#293753'),
+        ('border', '1px solid #D3D3D3') ,
+        ('font-family', 'Open Sans'),
+        ('font-size', '24px'),
+        ('text-align', 'center'),
+        ('padding', '10px')
+    ],
+}
+
+top_left_style = {
+    'selector': 'thead th:first-child',
+    'props': [
+        ('background-color', 'white'),
+        ('color', 'white')
     ]
+}
+
+cell_update = {
+    'selector': 'td',
+    'props': [
+        ('background-color', 'white'),
+        ('color', '#293753'),
+        ('border', '1px solid #D3D3D3') ,
+        ('font-family', 'Open Sans'), 
+        ('font-size', '22px'),
+        ('text-align', 'center'),
+        ('padding', '10px')
+    ]
+}
+
+cell_hover = {
+    'selector': 'td:hover',
+    'props': [
+        ('background-color', '#fcffcc'),
+        ('color', '#293753')]
+}
+
+table_width = {
+    'selector': 'table',
+    'props': [('width', '70%')] 
+}
+
+portfolio_table = (
+    intro.style
+    .set_table_styles([headers, cell_hover, top_left_style, cell_update,table_width])
+    .format(precision=2)
 )
 
-overview_chart.write_html("portfolio_table.html")
-
-overview_chart
+#Show Chart
+portfolio_table
 
 
 
@@ -715,8 +715,8 @@ portfolio_pie_bar_chart = alt.vconcat(
     portfolio_bar_chart
 ).properties(padding=100)
 
-##portfolio_pie_bar_chart.save('portfolio_pie_bar_chart.html', scale_factor=2.0)
 
+#Show Chart
 portfolio_pie_bar_chart
 
 
@@ -785,19 +785,52 @@ strat_base = alt.Chart(portfolio_strat_timeline).mark_line().encode(
              alt.Tooltip('Unrealized Gain:Q',
                          title='Unrealized Gain',
                          format='$.2f')]
-).properties(title=' ',width=500, height=300)
-
+).properties(
+    title=alt.TitleParams(
+        text='Trading Strategy Performances',          #Updated to add spacing after title
+        subtitle=' '),
+    width=500,
+    height=300
+)
 
 strat_timeline_chart = (strat_base).add_params(date_select).transform_filter(
     alt.datum.Days_From_Today <= date_select['Days_From_Today']
-).properties(title='Strategy Performance Timeline')
-
+)
 
 strat_timeline_chart=strat_timeline_chart.configure_title(
     fontSize=20,
     anchor='start'
 )
 
-##strat_timeline_chart.save('strat_timeline_chart.html', scale_factor=2.0)
-
+#Show figure
 strat_timeline_chart
+
+
+
+### Convert all figures to .html and .png files
+
+#Call Html2Image function
+hti = Html2Image()
+
+#First Viz
+yfinance_stock_timeseries_charts.save('yfinance_stock_timeseries.html', scale_factor=2.0)
+hti.screenshot(html_file='yfinance_stock_timeseries.html', save_as='yfinance_stock_timeseries.png')
+
+#Second Viz
+fig.write_html("economic_and_news_tables.html")
+hti.screenshot(html_file='economic_and_news_tables.html', save_as='economic_and_news_tables.png')
+
+#Third Viz
+html_output=portfolio_table.to_html()
+file_path = "portfolio_table.html"
+with open(file_path, "w") as file:
+    file.write(html_output)
+hti.screenshot(html_file='portfolio_table.html', save_as='portfolio_table.png')
+
+#Fourth Viz
+portfolio_pie_bar_chart.save('portfolio_pie_bar_chart.html', scale_factor=2.0)
+hti.screenshot(html_file='portfolio_pie_bar_chart.html', save_as='portfolio_pie_bar_chart.png')
+
+#Fifth Viz
+strat_timeline_chart.save('strat_timeline_chart.html', scale_factor=2.0)
+hti.screenshot(html_file='strat_timeline_chart.html', save_as='strat_timeline_chart.png')
